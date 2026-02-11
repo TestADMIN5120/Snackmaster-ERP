@@ -24,40 +24,46 @@ export default function SuperAdminOrganisations() {
   const [loading, setLoading] = useState(true);
   const [busyOrg, setBusyOrg] = useState(null);
 
-  // Toggle state: false = show active, true = show deleted
+  // false = active orgs, true = deleted orgs
   const [showDeleted, setShowDeleted] = useState(false);
 
-  // Re-run when toggle changes
   useEffect(() => {
     loadOrgs();
   }, [showDeleted]);
+
+  /* ───────── LOAD ORGANISATIONS ───────── */
 
   async function loadOrgs() {
     setLoading(true);
 
     try {
       if (showDeleted) {
-        // 🔹 CASE 1: Show DELETED organisations
-        // We can use a query here because we know 'deleted' exists and is true
         const q = query(
-          collection(db, "organisations"), 
+          collection(db, "organisations"),
           where("deleted", "==", true)
         );
+
         const snap = await getDocs(q);
-        setOrgs(snap.docs.map((d) => d.data()));
+        setOrgs(
+          snap.docs.map((d) => ({
+            id: d.id,
+            ...d.data(),
+          }))
+        );
       } else {
-        // 🔹 CASE 2: Show ACTIVE organisations
-        // PROBLEM: `where("deleted", "!=", true)` hides docs where 'deleted' field is missing.
-        // FIX: Fetch ALL, then filter in JS to include those with missing 'deleted' field.
         const snap = await getDocs(collection(db, "organisations"));
-        const allOrgs = snap.docs.map((d) => d.data());
-        
-        // Filter out any that are explicitly deleted
-        const activeOrgs = allOrgs.filter(org => org.deleted !== true);
+
+        const activeOrgs = snap.docs
+          .map((d) => ({
+            id: d.id,
+            ...d.data(),
+          }))
+          .filter((org) => org.deleted !== true);
+
         setOrgs(activeOrgs);
       }
     } catch (error) {
-      console.error("Error loading organisations:", error);
+      console.error("❌ Error loading organisations:", error);
     } finally {
       setLoading(false);
     }
@@ -73,65 +79,77 @@ export default function SuperAdminOrganisations() {
     setBusyOrg(org.id);
     const batch = writeBatch(db);
 
-    batch.update(doc(db, "organisations", org.id), {
-      status: "suspended",
-      suspended: true,
-      suspendedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-
-    const machinesSnap = await getDocs(
-      query(collection(db, "machines"), where("orgId", "==", org.id))
-    );
-
-    machinesSnap.forEach((machine) => {
-      batch.update(machine.ref, {
-        orgId: null,
-        assigned: false,
-        assignedTo: null,
-        status: "disabled",
-        disabledReason: "ORG_SUSPENDED",
+    try {
+      batch.update(doc(db, "organisations", org.id), {
+        status: "suspended",
+        suspended: true,
+        suspendedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-    });
 
-    await addDoc(collection(db, "admin_actions"), {
-      action: "ORG_SUSPENDED",
-      orgId: org.id,
-      orgName: org.name,
-      affectedMachines: machinesSnap.size,
-      performedBy: user.email,
-      createdAt: serverTimestamp(),
-    });
+      const machinesSnap = await getDocs(
+        query(collection(db, "machines"), where("orgId", "==", org.id))
+      );
 
-    await batch.commit();
-    await loadOrgs();
-    setBusyOrg(null);
+      machinesSnap.forEach((machine) => {
+        batch.update(machine.ref, {
+          orgId: null,
+          assigned: false,
+          assignedTo: null,
+          status: "disabled",
+          disabledReason: "ORG_SUSPENDED",
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      await batch.commit();
+
+      await addDoc(collection(db, "admin_actions"), {
+        action: "ORG_SUSPENDED",
+        orgId: org.id,
+        orgName: org.name,
+        affectedMachines: machinesSnap.size,
+        performedBy: user?.email || "unknown",
+        createdAt: serverTimestamp(),
+      });
+
+      await loadOrgs();
+    } catch (err) {
+      console.error("❌ Suspend failed:", err);
+      alert("Suspend failed");
+    } finally {
+      setBusyOrg(null);
+    }
   }
 
   async function activateOrg(org) {
     setBusyOrg(org.id);
 
-    await updateDoc(doc(db, "organisations", org.id), {
-      status: "active",
-      suspended: false,
-      suspendedAt: null,
-      updatedAt: serverTimestamp(),
-    });
+    try {
+      await updateDoc(doc(db, "organisations", org.id), {
+        status: "active",
+        suspended: false,
+        suspendedAt: null,
+        updatedAt: serverTimestamp(),
+      });
 
-    await addDoc(collection(db, "admin_actions"), {
-      action: "ORG_ACTIVATED",
-      orgId: org.id,
-      orgName: org.name,
-      performedBy: user.email,
-      createdAt: serverTimestamp(),
-    });
+      await addDoc(collection(db, "admin_actions"), {
+        action: "ORG_ACTIVATED",
+        orgId: org.id,
+        orgName: org.name,
+        performedBy: user?.email || "unknown",
+        createdAt: serverTimestamp(),
+      });
 
-    await loadOrgs();
-    setBusyOrg(null);
+      await loadOrgs();
+    } catch (err) {
+      console.error("❌ Activate failed:", err);
+      alert("Activate failed");
+    } finally {
+      setBusyOrg(null);
+    }
   }
 
-  // 🔹 Soft Delete Function
   async function softDeleteOrg(org) {
     if (!window.confirm(`Soft delete organisation ${org.name}?`)) return;
 
@@ -156,14 +174,13 @@ export default function SuperAdminOrganisations() {
 
       await loadOrgs();
     } catch (err) {
-      console.error("❌ Org soft delete failed", err);
+      console.error("❌ Soft delete failed:", err);
       alert("Soft delete failed");
     } finally {
       setBusyOrg(null);
     }
   }
 
-  // 🔹 Restore Function
   async function restoreOrg(org) {
     if (!window.confirm(`Restore organisation ${org.name}?`)) return;
 
@@ -188,12 +205,14 @@ export default function SuperAdminOrganisations() {
 
       await loadOrgs();
     } catch (err) {
-      console.error("❌ Org restore failed", err);
+      console.error("❌ Restore failed:", err);
       alert("Restore failed");
     } finally {
       setBusyOrg(null);
     }
   }
+
+  /* ───────── RENDER ───────── */
 
   if (loading) {
     return <div style={{ padding: 24 }}>Loading organisations…</div>;
@@ -213,16 +232,18 @@ export default function SuperAdminOrganisations() {
         </button>
       </div>
 
-      {/* 🔹 Toggle UI */}
-      <label style={{ marginBottom: 16, display: "flex", alignItems: "center", cursor: "pointer" }}>
+      {/* TOGGLE */}
+      <label style={toggleLabel}>
         <input
           type="checkbox"
           checked={showDeleted}
           onChange={() => setShowDeleted((v) => !v)}
-          style={{ marginRight: 8, transform: "scale(1.2)" }}
+          style={toggleInput}
         />
-        <span style={{ fontWeight: 500 }}>
-          {showDeleted ? "Showing Deleted Organisations Only" : "Show Deleted Organisations"}
+        <span>
+          {showDeleted
+            ? "Showing Deleted Organisations Only"
+            : "Show Deleted Organisations"}
         </span>
       </label>
 
@@ -241,16 +262,24 @@ export default function SuperAdminOrganisations() {
         <tbody>
           {orgs.map((org) => (
             <tr key={org.id} style={tr}>
-              <td style={td}>{org.name}</td>
+              <td style={td}>{org.name || "—"}</td>
               <td style={{ ...td, fontFamily: "monospace" }}>{org.id}</td>
-              <td style={td}>{org.status.toUpperCase()}</td>
-              <td style={td}>{org.adminEmail}</td>
-
-              {/* Action Column */}
               <td style={td}>
-                {!org.deleted ? (
+                {(org.status || "unknown").toUpperCase()}
+              </td>
+              <td style={td}>{org.adminEmail || "—"}</td>
+
+              <td style={td}>
+                {org.deleted === true ? (
+                  <button
+                    disabled={busyOrg === org.id}
+                    onClick={() => restoreOrg(org)}
+                    style={{ ...primaryBtn, background: "#2e7d32" }}
+                  >
+                    Restore
+                  </button>
+                ) : (
                   <>
-                    {/* Preserve existing Suspend/Activate toggle */}
                     {org.status === "active" ? (
                       <button
                         disabled={busyOrg === org.id}
@@ -269,24 +298,18 @@ export default function SuperAdminOrganisations() {
                       </button>
                     )}
 
-                    {/* Soft Delete Button */}
                     <button
                       disabled={busyOrg === org.id}
                       onClick={() => softDeleteOrg(org)}
-                      style={{ ...dangerBtn, marginLeft: 8, background: "#6d4c41" }}
+                      style={{
+                        ...dangerBtn,
+                        marginLeft: 8,
+                        background: "#6d4c41",
+                      }}
                     >
                       Soft Delete
                     </button>
                   </>
-                ) : (
-                  /* Restore Button for deleted orgs */
-                  <button
-                    disabled={busyOrg === org.id}
-                    onClick={() => restoreOrg(org)}
-                    style={{ ...primaryBtn, background: "#2e7d32" }}
-                  >
-                    Restore
-                  </button>
                 )}
               </td>
             </tr>
@@ -294,9 +317,9 @@ export default function SuperAdminOrganisations() {
 
           {orgs.length === 0 && (
             <tr>
-              <td colSpan={5} style={{ padding: 20, textAlign: "center", color: "#666" }}>
-                {showDeleted 
-                  ? "No deleted organisations found." 
+              <td colSpan={5} style={emptyRow}>
+                {showDeleted
+                  ? "No deleted organisations found."
                   : "No active organisations found."}
               </td>
             </tr>
@@ -365,4 +388,22 @@ const primaryBtn = {
   border: "none",
   borderRadius: 6,
   cursor: "pointer",
+};
+
+const toggleLabel = {
+  marginBottom: 16,
+  display: "flex",
+  alignItems: "center",
+  cursor: "pointer",
+};
+
+const toggleInput = {
+  marginRight: 8,
+  transform: "scale(1.2)",
+};
+
+const emptyRow = {
+  padding: 20,
+  textAlign: "center",
+  color: "#666",
 };

@@ -1,9 +1,11 @@
-// src/main.jsx
 console.log("🔥 MAIN JSX RELOADED");
 
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+
+/* ───────── ERROR BOUNDARY ───────── */
+import ErrorBoundary from "./components/ErrorBoundary";
 
 /* ───────── AUTH / CONTEXT ───────── */
 import { AdminProvider, useAdmin } from "./contexts/AdminContext";
@@ -27,12 +29,16 @@ import AdminAssignMachines from "./pages/admin/AdminAssignMachines";
 import AdminMachineSlots from "./pages/admin/AdminMachineSlots";
 
 /* ───────── REFILLER ───────── */
+import RefillerLayout from "./layouts/RefillerLayout";
+import RefillerMachines from "./pages/refiller/RefillerMachines";
+import RefillerMachineView from "./pages/refiller/RefillerMachineView";
 import RefillerMachineSlots from "./pages/refiller/RefillerMachineSlots";
+import RefillerHistory from "./pages/refiller/RefillerHistory";
 
 /* ───────── SUPER ADMIN ───────── */
 import SuperAdminLayout from "./layouts/SuperAdminLayout";
 import SuperAdminDashboard from "./pages/super/SuperAdminDashboard";
-import SuperAdminInsights from "./pages/super/SuperAdminInsights"; // <--- NEW IMPORT
+import SuperAdminInsights from "./pages/super/SuperAdminInsights";
 import SuperAdminOrganisations from "./pages/super/SuperAdminOrganisations";
 import SuperAdminOrgCreate from "./pages/super/SuperAdminOrgCreate";
 import SuperAdminAdmins from "./pages/super/SuperAdminAdmins";
@@ -49,7 +55,7 @@ import RequireSuperAdmin from "./components/RequireSuperAdmin";
 import "./styles.css";
 
 /* ─────────────────────────────
-   ROUTES
+    ROUTES
 ───────────────────────────── */
 function AppRoutes() {
   const { user, role, loading } = useAdmin();
@@ -73,6 +79,8 @@ function AppRoutes() {
             <Navigate to="/super" replace />
           ) : role === "admin" ? (
             <Navigate to="/admin" replace />
+          ) : role === "refiller" ? (
+            <Navigate to="/refiller" replace />
           ) : (
             <Dashboard />
           )
@@ -80,11 +88,18 @@ function AppRoutes() {
       />
 
       {/* ───────── REFILLER ───────── */}
-      <Route path="/machine/:id" element={<MachinePage />} />
-      <Route
-        path="/refiller/machines/:machineId/slots"
-        element={<RefillerMachineSlots />}
-      />
+      <Route 
+        path="/refiller" 
+        element={
+          user ? <RefillerLayout /> : <Navigate to="/login" />
+        }
+      >
+        <Route index element={<Navigate to="machines" replace />} />
+        <Route path="machines" element={<RefillerMachines />} />
+        <Route path="machines/:machineId" element={<RefillerMachineView />} />
+        <Route path="machines/:machineId/slots" element={<RefillerMachineSlots />} />
+        <Route path="history" element={<RefillerHistory />} />
+      </Route>
 
       {/* ───────── SUPER ADMIN ───────── */}
       <Route
@@ -95,25 +110,14 @@ function AppRoutes() {
           </RequireSuperAdmin>
         }
       >
-        {/* Dashboard */}
         <Route index element={<SuperAdminDashboard />} />
-        
-        {/* Insights (NEW) */}
         <Route path="insights" element={<SuperAdminInsights />} />
-
-        {/* Organisations */}
         <Route path="orgs" element={<SuperAdminOrganisations />} />
         <Route path="orgs/create" element={<SuperAdminOrgCreate />} />
-
-        {/* Admins */}
         <Route path="admins" element={<SuperAdminAdmins />} />
         <Route path="admins/create" element={<SuperAdminAdminCreate />} />
-
-        {/* Machines */}
         <Route path="machines" element={<SuperAdminMachines />} />
         <Route path="machines/create" element={<SuperAdminMachineCreate />} />
-
-        {/* Audit Logs */}
         <Route path="audit" element={<SuperAdminAuditLogs />} />
       </Route>
 
@@ -135,7 +139,7 @@ function AppRoutes() {
         <Route path="audit-logs" element={<AdminAuditLogs />} />
         <Route path="users" element={<AdminUsers />} />
       </Route>
-
+      
       {/* ───────── FALLBACK ───────── */}
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
@@ -143,7 +147,7 @@ function AppRoutes() {
 }
 
 /* ─────────────────────────────
-   APP BOOTSTRAP
+    APP BOOTSTRAP
 ───────────────────────────── */
 function App() {
   return (
@@ -155,4 +159,10 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  </React.StrictMode>
+);

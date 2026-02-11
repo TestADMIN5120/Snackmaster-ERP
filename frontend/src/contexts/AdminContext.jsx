@@ -1,8 +1,7 @@
-// frontend/src/contexts/AdminContext.jsx
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db, auth } from "../firebaseClient";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 
 const AdminContext = createContext(null);
 
@@ -38,8 +37,39 @@ export function AdminProvider({ children }) {
         const data = snap.data();
         console.log("✅ USER DOC LOADED:", data);
 
+        // 🔒 BLOCK SUSPENDED ORGS (TASK 3)
+        // If they are an admin, we verify if their organisation is active
+        if (data.role === "admin" && data.orgId) {
+          const orgSnap = await getDoc(doc(db, "organisations", data.orgId));
+
+          if (orgSnap.exists()) {
+            const org = orgSnap.data();
+
+            if (org.suspended === true || org.deleted === true) {
+              console.warn("🚫 ORG BLOCKED/SUSPENDED:", data.orgId);
+              // Clear states and sign out for security
+              setRole(null);
+              setOrgId(null);
+              await signOut(auth); 
+              setLoading(false);
+              return;
+            }
+          }
+        }
+
+        // 🔒 BLOCK DISABLED ADMINS (TASK 2/4 Logic)
+        if (data.status === "disabled" || data.deleted === true) {
+            console.warn("🚫 ADMIN USER DISABLED");
+            setRole(null);
+            setOrgId(null);
+            await signOut(auth);
+            setLoading(false);
+            return;
+        }
+
         setRole(data.role);
         setOrgId(data.orgId);
+
       } catch (err) {
         console.error("❌ AdminContext load failed:", err);
         setRole(null);

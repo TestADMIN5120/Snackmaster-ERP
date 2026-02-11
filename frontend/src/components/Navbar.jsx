@@ -1,13 +1,24 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { useAdmin } from "../contexts/AdminContext";
+import { signOut } from "firebase/auth";
+import { auth } from "../firebaseClient";
 
 export default function Navbar() {
   const nav = useNavigate();
-  const user = JSON.parse(localStorage.getItem("sm_user") || "{}");
+  const { role, user } = useAdmin();
 
-  function handleLogout() {
-    localStorage.removeItem("sm_user");
-    nav("/login");
+  // 🔑 ROLE-AWARE HOME
+  const home =
+    role === "super_admin"
+      ? "/super"
+      : role === "admin"
+      ? "/admin"
+      : "/refiller";
+
+  async function handleLogout() {
+    await signOut(auth);
+    nav("/login", { replace: true });
   }
 
   return (
@@ -15,7 +26,7 @@ export default function Navbar() {
       style={{
         width: "100%",
         padding: "12px 24px",
-        background: "#111",          
+        background: "#111",
         color: "#fff",
         display: "flex",
         alignItems: "center",
@@ -34,34 +45,38 @@ export default function Navbar() {
           letterSpacing: "1px",
           cursor: "pointer",
         }}
-        onClick={() => nav("/")}
+        onClick={() => nav(home)}
       >
         SNACK<span style={{ color: "#03a9f4" }}>MASTER</span>
       </div>
 
-      {/* CENTER MENU ITEMS */}
+      {/* CENTER MENU */}
       <div style={{ display: "flex", gap: "28px", fontSize: "1rem" }}>
-        <span style={linkStyle} onClick={() => nav("/")}>
+        <span style={linkStyle} onClick={() => nav(home)}>
           Dashboard
         </span>
 
-        <span style={linkStyle} onClick={() => nav("/")}>
-          Machines
-        </span>
+        {(role === "admin" || role === "super_admin") && (
+          <span style={linkStyle} onClick={() => nav("/admin/machines")}>
+            Machines
+          </span>
+        )}
 
-        <span style={linkStyle} onClick={() => nav("/")}>
-          Products
-        </span>
+        {role !== "refiller" && (
+          <span style={linkStyle} onClick={() => nav("/admin/products")}>
+            Products
+          </span>
+        )}
 
-        <span style={linkStyle} onClick={() => nav("/")}>
+        <span style={linkStyle} onClick={() => nav("/admin/refill-logs")}>
           Refill Logs
         </span>
       </div>
 
-      {/* RIGHT SIDE (EMAIL + LOGOUT) */}
+      {/* RIGHT SIDE */}
       <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
         <span style={{ fontSize: "0.95rem", opacity: 0.8 }}>
-          {user.email}
+          {user?.email}
         </span>
 
         <button

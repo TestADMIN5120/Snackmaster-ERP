@@ -1,11 +1,9 @@
 // frontend/src/pages/Login.jsx
 import React, { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../firebaseClient";
-import { useNavigate } from "react-router-dom";
+
 
 export default function Login() {
-  const nav = useNavigate(); // ✅ ADD THIS
+  
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,8 +23,11 @@ export default function Login() {
         password
       );
 
-      // ✅ SINGLE REDIRECT — LET APP ROUTER DECIDE
-      nav("/", { replace: true });
+      // ❌ NO redirect here
+      // ❌ NO role check here
+      // ❌ NO localStorage
+
+      // AdminContext + AppRoutes will take over automatically
 
     } catch (err) {
       console.error("Login failed:", err);
@@ -45,6 +46,8 @@ export default function Login() {
 
   return (
     <div className="login-page">
+      <div className="login-bg" aria-hidden="true" />
+
       <main className="login-card">
         <h1 className="brand">SNACKMASTER</h1>
         <p className="muted">Sign in to manage machines & refills</p>
@@ -57,6 +60,7 @@ export default function Login() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
             />
           </label>
 
@@ -67,6 +71,7 @@ export default function Login() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
             />
           </label>
 
@@ -76,6 +81,13 @@ export default function Login() {
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
+
+        <div className="help-text">
+          Need help?{" "}
+          <a href="mailto:vdsofficial@snackmaster.in">
+            Contact tech team
+          </a>
+        </div>
       </main>
     </div>
   );

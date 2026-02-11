@@ -1,8 +1,9 @@
-// frontend/src/firebaseClient.js
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
+// Configuration pulled from your .env.development file
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -12,9 +13,13 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// 🔒 ENSURE SINGLE APP INSTANCE
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+// Logging for verification
+// We use import.meta.env.MODE as a backup to ensure ENV isn't undefined
+console.log("🔥 ENV:", import.meta.env.VITE_ENV || import.meta.env.MODE);
+console.log("🔥 FIREBASE PROJECT:", firebaseConfig.projectId);
 
-// 🔒 SINGLETONS
+const app = initializeApp(firebaseConfig);
+
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const storage = getStorage(app);

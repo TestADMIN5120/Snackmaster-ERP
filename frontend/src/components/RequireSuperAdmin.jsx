@@ -6,10 +6,7 @@ export default function RequireSuperAdmin({ children }) {
   const { loading, isSuperAdmin } = useAdmin();
 
   if (loading) return <div>Loading…</div>;
-
-  if (!isSuperAdmin) {
-    return <Navigate to="/" replace />;
-  }
+  if (!isSuperAdmin) return <Navigate to="/" replace />;
 
   return children;
 }

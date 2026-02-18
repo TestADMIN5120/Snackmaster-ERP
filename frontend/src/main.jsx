@@ -2,7 +2,7 @@ console.log("🔥 MAIN JSX RELOADED");
 
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 /* ───────── ERROR BOUNDARY ───────── */
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -15,7 +15,6 @@ import Login from "./pages/Login";
 
 /* ───────── COMMON PAGES ───────── */
 import Dashboard from "./pages/Dashboard";
-import MachinePage from "./pages/MachinePage";
 
 /* ───────── ADMIN ───────── */
 import AdminLayout from "./layouts/AdminLayout";
@@ -27,13 +26,16 @@ import AdminAuditLogs from "./pages/admin/AdminAuditLogs";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminAssignMachines from "./pages/admin/AdminAssignMachines";
 import AdminMachineSlots from "./pages/admin/AdminMachineSlots";
+import AdminMachineIssues from "./pages/admin/AdminMachineIssues"; 
 
 /* ───────── REFILLER ───────── */
 import RefillerLayout from "./layouts/RefillerLayout";
-import RefillerMachines from "./pages/refiller/RefillerMachines";
-import RefillerMachineView from "./pages/refiller/RefillerMachineView";
+import RefillerDashboard from "./pages/refiller/RefillerDashboard"; 
+import RefillerMachinePage from "./pages/refiller/RefillerMachinePage"; 
 import RefillerMachineSlots from "./pages/refiller/RefillerMachineSlots";
+import RefillerReportIssue from "./pages/refiller/RefillerReportIssue"; 
 import RefillerHistory from "./pages/refiller/RefillerHistory";
+import RefillerMakeKit from "./pages/refiller/RefillerMakeKit"; 
 
 /* ───────── SUPER ADMIN ───────── */
 import SuperAdminLayout from "./layouts/SuperAdminLayout";
@@ -46,6 +48,7 @@ import SuperAdminAdminCreate from "./pages/super/SuperAdminAdminCreate";
 import SuperAdminMachines from "./pages/super/SuperAdminMachines";
 import SuperAdminMachineCreate from "./pages/super/SuperAdminMachineCreate";
 import SuperAdminAuditLogs from "./pages/super/SuperAdminAuditLogs";
+import SuperAdminIssues from "./pages/super/SuperAdminIssues";
 
 /* ───────── ROUTE GUARDS ───────── */
 import RequireAdmin from "./components/RequireAdmin";
@@ -55,13 +58,27 @@ import RequireSuperAdmin from "./components/RequireSuperAdmin";
 import "./styles.css";
 
 /* ─────────────────────────────
-    ROUTES
+   ROUTES CONFIGURATION
 ───────────────────────────── */
 function AppRoutes() {
   const { user, role, loading } = useAdmin();
+  const location = useLocation();
 
+  // 🛑 1. STOP INFINITE LOOPS: Wait for Firebase
   if (loading) {
-    return <div style={{ padding: 32 }}>Initializing session…</div>;
+    return (
+      <div style={{ height: "100vh", display: "flex", justifyContent: "center", alignItems: "center", background: "#f4f7f6" }}>
+        <h3 style={{color: "#555"}}>Loading SnackMaster...</h3>
+      </div>
+    );
+  }
+
+  // 🛑 2. LOGIN GUARD: If logged in, redirect away from Login
+  if (user && location.pathname === "/login") {
+    if (role === "super_admin") return <Navigate to="/super" replace />;
+    if (role === "admin") return <Navigate to="/admin" replace />;
+    if (role === "refiller") return <Navigate to="/refiller" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return (
@@ -94,10 +111,12 @@ function AppRoutes() {
           user ? <RefillerLayout /> : <Navigate to="/login" />
         }
       >
-        <Route index element={<Navigate to="machines" replace />} />
-        <Route path="machines" element={<RefillerMachines />} />
-        <Route path="machines/:machineId" element={<RefillerMachineView />} />
+        <Route index element={<RefillerDashboard />} />
+        <Route path="machines" element={<RefillerDashboard />} />
+        <Route path="machines/:machineId" element={<RefillerMachinePage />} />
         <Route path="machines/:machineId/slots" element={<RefillerMachineSlots />} />
+        <Route path="machines/:machineId/report-issue" element={<RefillerReportIssue />} />
+        <Route path="machines/:machineId/make-kit" element={<RefillerMakeKit />} /> 
         <Route path="history" element={<RefillerHistory />} />
       </Route>
 
@@ -119,6 +138,7 @@ function AppRoutes() {
         <Route path="machines" element={<SuperAdminMachines />} />
         <Route path="machines/create" element={<SuperAdminMachineCreate />} />
         <Route path="audit" element={<SuperAdminAuditLogs />} />
+        <Route path="issues" element={<SuperAdminIssues />} />
       </Route>
 
       {/* ───────── ADMIN ───────── */}
@@ -131,6 +151,7 @@ function AppRoutes() {
         }
       >
         <Route index element={<AdminDashboard />} />
+        <Route path="issues" element={<AdminMachineIssues />} /> 
         <Route path="machines" element={<AdminMachines />} />
         <Route path="machines/assign" element={<AdminAssignMachines />} />
         <Route path="machines/:machineId/slots" element={<AdminMachineSlots />} />
@@ -147,7 +168,7 @@ function AppRoutes() {
 }
 
 /* ─────────────────────────────
-    APP BOOTSTRAP
+   APP BOOTSTRAP
 ───────────────────────────── */
 function App() {
   return (

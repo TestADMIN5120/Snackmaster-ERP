@@ -254,7 +254,7 @@ export default function SuperAdminOrganisations() {
             <th style={th}>Name</th>
             <th style={th}>Org ID</th>
             <th style={th}>Status</th>
-            <th style={th}>Admin</th>
+            {/* 🟢 REMOVED ADMIN HEADER */}
             <th style={th}>Action</th>
           </tr>
         </thead>
@@ -267,7 +267,8 @@ export default function SuperAdminOrganisations() {
               <td style={td}>
                 {(org.status || "unknown").toUpperCase()}
               </td>
-              <td style={td}>{org.adminEmail || "—"}</td>
+              
+              {/* 🟢 REMOVED ADMIN EMAIL COLUMN */}
 
               <td style={td}>
                 {org.deleted === true ? (
@@ -317,7 +318,7 @@ export default function SuperAdminOrganisations() {
 
           {orgs.length === 0 && (
             <tr>
-              <td colSpan={5} style={emptyRow}>
+              <td colSpan={4} style={emptyRow}>
                 {showDeleted
                   ? "No deleted organisations found."
                   : "No active organisations found."}

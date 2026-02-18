@@ -4,9 +4,8 @@ import {
   collection,
   onSnapshot,
   doc,
-  deleteDoc,
-  addDoc,
   updateDoc,
+  addDoc,
   serverTimestamp,
   getDocs,
   query,
@@ -15,6 +14,7 @@ import {
 
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebaseClient";
+import { useAdmin } from "../../contexts/AdminContext"; // 🟢 Import Context
 
 import FilterBar from "../../components/AdminMachines/FilterBar";
 import Pagination from "../../components/AdminMachines/Pagination";
@@ -23,6 +23,7 @@ import EditMachineModal from "../../components/EditMachineModal";
 
 export default function AdminMachines() {
   const nav = useNavigate();
+  const { user, orgId } = useAdmin(); // 🟢 Get Org ID from Context
 
   const [machines, setMachines] = useState([]);
   const [refillers, setRefillers] = useState([]);
@@ -33,20 +34,44 @@ export default function AdminMachines() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [loading, setLoading] = useState(true);
 
-  /** LOAD MACHINES LIVE */
+  /** LOAD MACHINES LIVE (Filtered by Org) */
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "machines"), (snap) => {
-      setMachines(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-    return () => unsub();
-  }, []);
+    if (!orgId) return;
 
-  /** LOAD REFILLERS */
+    setLoading(true);
+    
+    // 🟢 SECURE QUERY: Only my Org, Only active (not deleted)
+    const q = query(
+      collection(db, "machines"),
+      where("orgId", "==", orgId),
+      where("deleted", "==", false)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      setMachines(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, (err) => {
+      console.error("❌ Machine Access Denied:", err);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [orgId]);
+
+  /** LOAD REFILLERS (Filtered by Org) */
   useEffect(() => {
     async function loadRefillers() {
+      if (!orgId) return;
       try {
-        const q = query(collection(db, "users"), where("role", "==", "refiller"));
+        // 🟢 SECURE QUERY: Only refillers in my Org
+        const q = query(
+          collection(db, "users"),
+          where("role", "==", "refiller"),
+          where("orgId", "==", orgId),
+          where("deleted", "==", false)
+        );
         const s = await getDocs(q);
         setRefillers(s.docs.map((d) => ({ uid: d.id, ...d.data() })));
       } catch (e) {
@@ -54,7 +79,7 @@ export default function AdminMachines() {
       }
     }
     loadRefillers();
-  }, []);
+  }, [orgId]);
 
   useEffect(() => setCurrentPage(1), [search, statusFilter, pageSize]);
 
@@ -86,9 +111,10 @@ export default function AdminMachines() {
         updatedAt: serverTimestamp(),
       });
 
-      const user = JSON.parse(localStorage.getItem("sm_user") || "{}");
       await addDoc(collection(db, "admin_actions"), {
-        actorEmail: user.email,
+        actorEmail: user.email, // 🟢 Use Context User
+        actorUid: user.uid,
+        orgId: orgId, // 🟢 Tag with Org
         actionType: "change_status",
         machineId,
         newStatus,
@@ -99,13 +125,19 @@ export default function AdminMachines() {
     }
   }
 
-  /** DELETE MACHINE */
+  /** DELETE MACHINE (Soft Delete) */
   async function deleteMachine(machineId) {
     if (!confirm(`Delete machine ${machineId}?`)) return;
     try {
-      await deleteDoc(doc(db, "machines", machineId));
+      // 🟢 SOFT DELETE to respect security rules & keep audit trail
+      await updateDoc(doc(db, "machines", machineId), {
+        deleted: true,
+        deletedAt: serverTimestamp(),
+        deletedBy: user.email
+      });
       alert("Machine deleted.");
-    } catch {
+    } catch (err) {
+      console.error(err);
       alert("Delete failed.");
     }
   }
@@ -130,6 +162,8 @@ export default function AdminMachines() {
       assignedAt: serverTimestamp(),
     });
   }
+
+  if (loading) return <div style={{ padding: 24 }}>Loading machines...</div>;
 
   return (
     <div>
@@ -187,14 +221,21 @@ export default function AdminMachines() {
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                   <option value="service-down">Service Down</option>
+                  <option value="issue_reported">Issue Reported</option>
                 </select>
               </td>
 
-              <td style={td}>{m.assignedEmail || <em>Unassigned</em>}</td>
+              <td style={td}>
+                 {m.assignedEmail ? (
+                    <span style={{fontSize:12, fontWeight:500}}>{m.assignedEmail}</span>
+                 ) : (
+                    <span style={{color:'#999', fontSize:12}}>Unassigned</span>
+                 )}
+              </td>
 
               <td style={td}>
-                {m.last_refill_at?.seconds
-                  ? new Date(m.last_refill_at.seconds * 1000).toLocaleString("en-IN")
+                {m.lastRefillCompletedAt?.seconds
+                  ? new Date(m.lastRefillCompletedAt.seconds * 1000).toLocaleString("en-IN")
                   : "-"}
               </td>
 
@@ -204,7 +245,6 @@ export default function AdminMachines() {
                     Edit
                   </button>
 
-                  {/* OPEN SLOT CONFIG PAGE */}
                   <button
                     style={btnPurple}
                     onClick={() => nav(`/admin/machines/${m.id}/slots`)}
@@ -222,6 +262,12 @@ export default function AdminMachines() {
         </tbody>
       </table>
 
+      {machines.length === 0 && (
+        <div style={{padding:40, textAlign:'center', color:'#666'}}>
+            No machines found for your organization.
+        </div>
+      )}
+
       <Pagination
         total={filtered.length}
         currentPage={currentPage}
@@ -230,7 +276,8 @@ export default function AdminMachines() {
         setPageSize={setPageSize}
       />
 
-      {showAdd && <AddMachineModal onClose={() => setShowAdd(false)} />}
+      {/* MODALS: Pass OrgId down just in case */}
+      {showAdd && <AddMachineModal onClose={() => setShowAdd(false)} orgId={orgId} />}
       {editMachine && <EditMachineModal machine={editMachine} onClose={() => setEditMachine(null)} />}
     </div>
   );
@@ -240,7 +287,7 @@ export default function AdminMachines() {
 const th = { textAlign: "left", padding: "10px", fontWeight: 700, fontSize: 14 };
 const td = { padding: "10px", fontSize: 14 };
 
-const btnSecondary = { padding: "6px 10px", background: "#3498db", borderRadius: 6, color: "#fff" };
-const btnDanger = { padding: "6px 10px", background: "#e74c3c", borderRadius: 6, color: "#fff" };
-const btnGreen = { padding: "8px 14px", background: "#28a745", borderRadius: 6, color: "#fff" };
-const btnPurple = { padding: "6px 10px", background: "#6f42c1", borderRadius: 6, color: "#fff" };
+const btnSecondary = { padding: "6px 10px", background: "#3498db", borderRadius: 6, color: "#fff", border:'none', cursor:'pointer' };
+const btnDanger = { padding: "6px 10px", background: "#e74c3c", borderRadius: 6, color: "#fff", border:'none', cursor:'pointer' };
+const btnGreen = { padding: "8px 14px", background: "#28a745", borderRadius: 6, color: "#fff", border:'none', cursor:'pointer' };
+const btnPurple = { padding: "6px 10px", background: "#6f42c1", borderRadius: 6, color: "#fff", border:'none', cursor:'pointer' };

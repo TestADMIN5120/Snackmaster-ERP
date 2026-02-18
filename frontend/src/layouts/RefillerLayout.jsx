@@ -1,48 +1,78 @@
 import React from "react";
-import { Outlet, useNavigate, Link } from "react-router-dom";
-import { auth } from "../firebaseClient";
+import { Link, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
+import { auth } from "../firebaseClient";
 
 export default function RefillerLayout() {
   const navigate = useNavigate();
 
-  const handleLogout = async () => {
+  async function handleLogout() {
     await signOut(auth);
     navigate("/login");
-  };
+  }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f7fa" }}>
-      <header style={header}>
-        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-          <span style={{ fontWeight: 700, fontSize: "1.2rem" }}>Refiller App</span>
-          <nav style={{ display: "flex", gap: "15px" }}>
-            <Link to="/refiller/machines" style={navLink}>Machines</Link>
-            <Link to="/refiller/history" style={navLink}>History</Link>
-          </nav>
+    <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#f4f6f8" }}>
+      
+      {/* SIDEBAR */}
+      <aside style={sidebar}>
+        <div style={{ marginBottom: 32 }}>
+          <h2 style={{ margin: 0, fontSize: "20px", color: "#64b5f6" }}>Refiller App</h2>
+          <small style={{ color: "#aaa" }}>v1.0.0</small>
         </div>
-        <button onClick={handleLogout} style={logoutBtn}>Logout</button>
-      </header>
 
-      <main style={{ padding: 16, maxWidth: 600, margin: "0 auto" }}>
+        <nav style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <Link to="/refiller" style={link}>
+            📦 Dashboard
+          </Link>
+          <Link to="/refiller/history" style={link}>
+            🕒 History
+          </Link>
+        </nav>
+
+        <button onClick={handleLogout} style={logoutBtn}>
+          Logout
+        </button>
+      </aside>
+
+      {/* MAIN CONTENT AREA */}
+      <main style={{ flex: 1, padding: "24px", overflowY: "auto" }}>
         <Outlet />
       </main>
     </div>
   );
 }
 
-const header = {
-  height: 60,
+// --- Styles ---
+const sidebar = {
+  width: "250px",
   background: "#0f2f4a",
   color: "#fff",
+  padding: "24px",
   display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  padding: "0 16px",
-  position: "sticky",
-  top: 0,
-  zIndex: 1000
+  flexDirection: "column",
+  boxShadow: "2px 0 10px rgba(0,0,0,0.1)",
 };
 
-const navLink = { color: "#fff", textDecoration: "none", fontSize: "14px", opacity: 0.8 };
-const logoutBtn = { background: "#e53935", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 4, cursor: "pointer" };
+const link = {
+  color: "#e3f2fd",
+  textDecoration: "none",
+  padding: "12px",
+  background: "rgba(255,255,255,0.05)",
+  borderRadius: "8px",
+  fontSize: "15px",
+  fontWeight: "500",
+  transition: "0.2s",
+};
+
+const logoutBtn = {
+  marginTop: "auto",
+  padding: "12px",
+  background: "#cf6679",
+  color: "#fff",
+  border: "none",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontSize: "14px",
+  fontWeight: "bold",
+};

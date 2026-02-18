@@ -1,15 +1,8 @@
-// src/pages/super/SuperAdminAdminCreate.jsx
 import React, { useEffect, useState } from "react";
-import {
-  collection,
-  getDocs,
-  addDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { sendPasswordResetEmail } from "firebase/auth";
+import { collection, getDocs } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-import { db, auth } from "../../firebaseClient";
-import { useAdmin } from "../../contexts/AdminContext";
+import { db } from "../../firebaseClient";
+import { createSecondaryUser } from "../../utils/authHelpers"; // 🟢 Import Helper
 
 function Field({ label, ...props }) {
   return (
@@ -23,19 +16,21 @@ function Field({ label, ...props }) {
 }
 
 export default function SuperAdminAdminCreate() {
-  console.log("🔥 SuperAdminAdminCreate MOUNTED");
-
   const navigate = useNavigate();
-  const { user } = useAdmin();
-
   const [orgs, setOrgs] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ email: "", orgId: "" });
+  
+  const [form, setForm] = useState({ 
+    email: "", 
+    password: "", 
+    name: "", 
+    orgId: "" 
+  });
 
   useEffect(() => {
     async function loadOrgs() {
       const snap = await getDocs(collection(db, "organisations"));
-      setOrgs(snap.docs.map(d => d.data()));
+      setOrgs(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(o => !o.deleted));
     }
     loadOrgs();
   }, []);
@@ -47,7 +42,7 @@ export default function SuperAdminAdminCreate() {
   async function createAdmin(e) {
     e.preventDefault();
 
-    if (!form.email || !form.orgId) {
+    if (!form.email || !form.orgId || !form.password || !form.name) {
       alert("All fields required");
       return;
     }
@@ -55,28 +50,19 @@ export default function SuperAdminAdminCreate() {
     setSaving(true);
 
     try {
-      await addDoc(collection(db, "users"), {
-        email: form.email.trim(),
+      // 🟢 Use Helper to create Auth + Firestore without logging out
+      await createSecondaryUser(form.email, form.password, {
         role: "admin",
         orgId: form.orgId,
-        createdAt: serverTimestamp(),
+        displayName: form.name,
+        createdBy: "super_admin"
       });
 
-      await sendPasswordResetEmail(auth, form.email.trim());
-
-      await addDoc(collection(db, "admin_actions"), {
-        action: "ADMIN_CREATED",
-        adminEmail: form.email.trim(),
-        orgId: form.orgId,
-        performedBy: user?.email || "unknown",
-        createdAt: serverTimestamp(),
-      });
-
-      alert("Admin created & password reset sent.");
+      alert(`✅ Admin created successfully!\n\nEmail: ${form.email}\nPassword: ${form.password}\n\nPlease share these credentials securely.`);
       navigate("/super/admins");
     } catch (err) {
       console.error("❌ Admin creation failed", err);
-      alert("Failed to create admin.");
+      alert("Failed to create admin: " + err.message);
     } finally {
       setSaving(false);
     }
@@ -84,17 +70,36 @@ export default function SuperAdminAdminCreate() {
 
   return (
     <div style={{ maxWidth: 520, padding: 24 }}>
-      <h1>Create Admin</h1>
+      <h1>Create New Admin</h1>
 
       <form onSubmit={createAdmin}>
         <Field
+          label="Full Name"
+          name="name"
+          placeholder="John Doe"
+          value={form.name}
+          onChange={updateField}
+        />
+
+        <Field
           label="Admin Email"
           name="email"
+          type="email"
+          placeholder="admin@franchise.com"
           value={form.email}
           onChange={updateField}
         />
 
-        <label style={{ fontWeight: 600 }}>Organisation</label>
+        <Field
+          label="Password (Set Initial)"
+          name="password"
+          type="text" // Visible so you can copy it
+          placeholder="Set a strong password..."
+          value={form.password}
+          onChange={updateField}
+        />
+
+        <label style={{ fontWeight: 600, display:'block', marginBottom: 6 }}>Assign Organisation</label>
         <select
           name="orgId"
           value={form.orgId}
@@ -111,7 +116,7 @@ export default function SuperAdminAdminCreate() {
 
         <div style={{ marginTop: 24 }}>
           <button type="submit" disabled={saving} style={btnPrimary}>
-            {saving ? "Creating…" : "Create Admin"}
+            {saving ? "Creating User..." : "Create Admin Account"}
           </button>
           <button
             type="button"
@@ -131,6 +136,7 @@ const inputStyle = {
   padding: "10px",
   borderRadius: 6,
   border: "1px solid #ccc",
+  boxSizing: 'border-box'
 };
 
 const btnPrimary = {
@@ -139,9 +145,15 @@ const btnPrimary = {
   color: "#fff",
   border: "none",
   borderRadius: 6,
+  cursor: "pointer",
+  fontWeight: "bold"
 };
 
 const btnSecondary = {
   marginLeft: 12,
   padding: "10px 16px",
+  background: "#e0e0e0",
+  border: "none",
+  borderRadius: 6,
+  cursor: "pointer",
 };

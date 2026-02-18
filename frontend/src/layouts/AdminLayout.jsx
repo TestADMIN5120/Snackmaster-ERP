@@ -37,12 +37,16 @@ export default function AdminLayout() {
         color: "#fff",
         padding: "20px 12px",
         position: "fixed",
-        height: "100vh"
+        height: "100vh",
+        overflowY: "auto" // Added scroll in case menu gets long
       }}>
         <h2 style={{ color: "#0bc3ff", marginBottom: 30 }}>Admin Panel</h2>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <Link to="/admin" style={linkStyle}>Dashboard</Link>
+          
+          {/* 🟢 NEW LINK: Machine Issues */}
+          <Link to="/admin/issues" style={linkStyle}>🚨 Machine Issues</Link>
 
           <div>
             <div style={{ color: "#777", fontSize: 11, padding: "10px 12px", textTransform: "uppercase", letterSpacing: 1 }}>Inventory</div>

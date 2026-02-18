@@ -6,8 +6,6 @@ import { auth } from "../firebaseClient";
 export default function SuperAdminLayout() {
   const navigate = useNavigate();
 
-  // Used the safer logic from the old code (try/finally)
-  // This ensures you are redirected even if Firebase throws an error
   async function handleLogout() {
     try {
       await signOut(auth);
@@ -28,6 +26,7 @@ export default function SuperAdminLayout() {
           <Link to="/super/orgs" style={linkStyle}>Organisations</Link>
           <Link to="/super/admins" style={linkStyle}>Admins</Link>
           <Link to="/super/machines" style={linkStyle}>Machines</Link>
+          <Link to="/super/issues" style={linkStyle}>Issues</Link> {/* 🆕 NEW LINK */}
           <Link to="/super/audit" style={linkStyle}>Audit Logs</Link>
         </nav>
 
@@ -61,7 +60,6 @@ const navStyle = {
   gap: 10,
 };
 
-// Kept the nice visual style from the old code for links
 const linkStyle = {
   textDecoration: "none",
   color: "#e3f2fd",
@@ -70,7 +68,7 @@ const linkStyle = {
   borderRadius: 6,
   fontWeight: 500,
   transition: "background 0.2s ease",
-  display: "block", // Ensures padding works correctly
+  display: "block",
 };
 
 const logoutStyle = {
@@ -81,6 +79,6 @@ const logoutStyle = {
   color: "#fff",
   borderRadius: 6,
   fontWeight: 600,
-  cursor: "pointer", // Added cursor pointer for better UX
-  width: "100%",     // Ensures button fills the width
+  cursor: "pointer",
+  width: "100%",
 };

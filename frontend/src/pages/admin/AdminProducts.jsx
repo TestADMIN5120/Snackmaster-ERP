@@ -5,12 +5,12 @@ import {
   onSnapshot,
   doc,
   addDoc,
-  updateDoc,
   deleteDoc,
   serverTimestamp
 } from "firebase/firestore";
 
 import { db } from "../../firebaseClient";
+import { useAdmin } from "../../contexts/AdminContext"; // 🟢 Import Context
 
 import ProductFilterBar from "../../components/AdminProducts/ProductFilterBar";
 import ProductPagination from "../../components/AdminProducts/ProductPagination";
@@ -20,6 +20,7 @@ import AddProductModal from "../../components/AdminProducts/AddProductModal";
 import EditProductModal from "../../components/AdminProducts/EditProductModal";
 
 export default function AdminProducts() {
+  const { user } = useAdmin(); // 🟢 Use Secure Context
   const [products, setProducts] = useState([]);
 
   const [search, setSearch] = useState("");
@@ -30,6 +31,7 @@ export default function AdminProducts() {
   const [editProduct, setEditProduct] = useState(null);
 
   useEffect(() => {
+    // 🟢 Fetch products (we sort them in the useMemo below)
     const unsub = onSnapshot(collection(db, "products"), (snap) => {
       setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
@@ -40,11 +42,21 @@ export default function AdminProducts() {
 
   const filtered = useMemo(() => {
     const txt = search.toLowerCase();
-    return products.filter(
+    
+    // 1. Filter
+    const list = products.filter(
       (p) =>
         (p.name || "").toLowerCase().includes(txt) ||
         (p.sku || "").toLowerCase().includes(txt)
     );
+
+    // 2. 🟢 SORT by SKU Ascending (Numeric aware: SKU 2 before SKU 10)
+    return list.sort((a, b) => {
+      const skuA = (a.sku || "").toString().toLowerCase();
+      const skuB = (b.sku || "").toString().toLowerCase();
+      return skuA.localeCompare(skuB, undefined, { numeric: true });
+    });
+
   }, [products, search]);
 
   const paged = useMemo(() => {
@@ -58,9 +70,9 @@ export default function AdminProducts() {
     try {
       await deleteDoc(doc(db, "products", id));
 
-      const user = JSON.parse(localStorage.getItem("sm_user") || "{}");
+      // 🟢 Use the secure user object from context
       await addDoc(collection(db, "admin_actions"), {
-        actorEmail: user.email,
+        actorEmail: user?.email || "unknown",
         actionType: "delete_product",
         productId: id,
         createdAt: serverTimestamp()

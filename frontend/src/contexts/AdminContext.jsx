@@ -1,104 +1,84 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
-import { db, auth } from "../firebaseClient";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { auth, db } from "../firebaseClient";
 
-const AdminContext = createContext(null);
+const AdminContext = createContext();
+
+export function useAdmin() {
+  return useContext(AdminContext);
+}
 
 export function AdminProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null);
+  const [user, setUser] = useState(null); // Full user object (Auth + DB Data)
+  const [role, setRole] = useState(null); // "admin" | "refiller" | "super_admin"
   const [orgId, setOrgId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      console.log("🔐 AUTH STATE:", u?.uid, u?.email);
+    console.log("🔄 AdminContext: Initializing Auth Listener...");
+    
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        console.log("🔐 Auth Detected:", currentUser.email);
+        
+        // 1. Listen to User Profile Changes Real-time
+        const userRef = doc(db, "users", currentUser.uid);
+        
+        const unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const userData = docSnap.data();
+            console.log("✅ User Profile Loaded:", userData.role);
 
-      if (!u) {
+            // Prevent login if account is disabled/deleted
+            if (userData.deleted || userData.status === 'disabled') {
+              alert("Your account has been disabled. Contact support.");
+              auth.signOut();
+              return;
+            }
+
+            // Set Context State
+            setUser({ ...currentUser, ...userData });
+            setRole(userData.role);
+            setOrgId(userData.orgId);
+          } else {
+            console.error("❌ User document missing in Firestore!");
+            setUser(currentUser);
+            setRole("guest"); // Fallback role
+          }
+          setLoading(false);
+        }, (error) => {
+          console.error("❌ Firestore Read Error (User Doc):", error);
+          // If we can't read the user doc (permission denied), we can't let them in.
+          setUser(null);
+          setRole(null);
+          setLoading(false);
+        });
+
+        return () => unsubscribeSnapshot(); // Cleanup snapshot on unmount/change
+
+      } else {
+        console.log("👋 User Logged Out");
         setUser(null);
         setRole(null);
         setOrgId(null);
         setLoading(false);
-        return;
       }
-
-      setUser(u);
-
-      try {
-        const ref = doc(db, "users", u.uid);
-        const snap = await getDoc(ref);
-
-        if (!snap.exists()) {
-          console.error("❌ USER DOC MISSING FOR UID:", u.uid);
-          throw new Error("User profile not found");
-        }
-
-        const data = snap.data();
-        console.log("✅ USER DOC LOADED:", data);
-
-        // 🔒 BLOCK SUSPENDED ORGS (TASK 3)
-        // If they are an admin, we verify if their organisation is active
-        if (data.role === "admin" && data.orgId) {
-          const orgSnap = await getDoc(doc(db, "organisations", data.orgId));
-
-          if (orgSnap.exists()) {
-            const org = orgSnap.data();
-
-            if (org.suspended === true || org.deleted === true) {
-              console.warn("🚫 ORG BLOCKED/SUSPENDED:", data.orgId);
-              // Clear states and sign out for security
-              setRole(null);
-              setOrgId(null);
-              await signOut(auth); 
-              setLoading(false);
-              return;
-            }
-          }
-        }
-
-        // 🔒 BLOCK DISABLED ADMINS (TASK 2/4 Logic)
-        if (data.status === "disabled" || data.deleted === true) {
-            console.warn("🚫 ADMIN USER DISABLED");
-            setRole(null);
-            setOrgId(null);
-            await signOut(auth);
-            setLoading(false);
-            return;
-        }
-
-        setRole(data.role);
-        setOrgId(data.orgId);
-
-      } catch (err) {
-        console.error("❌ AdminContext load failed:", err);
-        setRole(null);
-        setOrgId(null);
-      }
-
-      setLoading(false);
     });
 
-    return () => unsub();
+    return () => unsubscribeAuth();
   }, []);
 
+  const value = {
+    user,
+    role,
+    orgId,
+    loading
+  };
+
   return (
-    <AdminContext.Provider
-      value={{
-        user,
-        role,
-        orgId,
-        isSuperAdmin: role === "super_admin",
-        isAdmin: role === "admin",
-        isRefiller: role === "refiller",
-        loading,
-      }}
-    >
-      {children}
+    <AdminContext.Provider value={value}>
+      {!loading ? children : <div style={{padding:50, textAlign:'center'}}>Loading App Session...</div>}
     </AdminContext.Provider>
   );
-}
-
-export function useAdmin() {
-  return useContext(AdminContext);
 }

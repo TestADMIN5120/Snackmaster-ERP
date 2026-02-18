@@ -1,4 +1,3 @@
-// frontend/src/pages/refiller/RefillerMachineSlots.jsx
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -13,10 +12,12 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../firebaseClient";
+import { useAdmin } from "../../contexts/AdminContext";
 
 export default function RefillerMachineSlots() {
   const { machineId } = useParams();
   const nav = useNavigate();
+  const { user } = useAdmin();
 
   const [machine, setMachine] = useState(null);
   const [slots, setSlots] = useState([]);
@@ -26,65 +27,74 @@ export default function RefillerMachineSlots() {
   const [editingSlot, setEditingSlot] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const smUser = JSON.parse(localStorage.getItem("sm_user") || "{}");
-  const myUID = smUser.uid;
-  const myEmail = smUser.email;
-
   useEffect(() => {
-    if (!machineId) return;
+    if (!machineId || !user) return;
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machineId]);
+  }, [machineId, user]);
 
   async function loadAll() {
     setLoading(true);
     try {
-      // 1) machine doc
+      // 1) Machine Doc
       const mSnap = await getDoc(doc(db, "machines", machineId));
       if (!mSnap.exists()) {
         alert("Machine not found");
-        nav("/"); // back
+        nav("/refiller");
         return;
       }
       const m = { id: mSnap.id, ...mSnap.data() };
 
-      // ensure this machine is assigned to current refiller
-      if (!m.assignedTo || m.assignedTo !== myUID) {
+      if (!m.assignedTo || m.assignedTo !== user.uid) {
         alert("You are not assigned to this machine.");
-        nav("/"); // redirect to refiller home/dashboard
+        nav("/refiller");
         return;
       }
       setMachine(m);
 
-      // 2) slots
-      const snapSlots = await getDocs(collection(db, "machines", machineId, "slots"));
+      // 2) Slots
+      const snapSlots = await getDocs(
+        collection(db, "machines", machineId, "slots")
+      );
       const slotsList = snapSlots.docs.map((d) => ({ id: d.id, ...d.data() }));
       setSlots(slotsList);
 
-      // 3) products
-      const snapProducts = await getDocs(collection(db, "products"));
-      const prodList = snapProducts.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // 3) Products (With Sorting)
+      const qProducts = query(
+        collection(db, "products"), 
+        where("deleted", "==", false)
+      );
+      const snapProducts = await getDocs(qProducts);
+      
+      const prodList = snapProducts.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      // 🟢 SORTING LOGIC: SKU Ascending
+      prodList.sort((a, b) => {
+        const skuA = (a.sku || "").toString().toLowerCase();
+        const skuB = (b.sku || "").toString().toLowerCase();
+        return skuA.localeCompare(skuB, undefined, { numeric: true });
+      });
+
       setProducts(prodList);
+
     } catch (e) {
       console.error("Failed to load refiller slots", e);
-      alert("Error loading machine or slots.");
+      alert("Error loading data. Check console permissions.");
     } finally {
       setLoading(false);
     }
   }
 
-  // -----------------------
-  // Helpers (same visual codes as admin)
-  // -----------------------
+  // --- Helpers ---
   function traysFromSlots() {
     const setT = new Set();
-    slots.forEach((s) => {
-      if (s.tray != null) setT.add(s.tray);
-    });
+    slots.forEach((s) => { if (s.tray != null) setT.add(s.tray); });
     return Array.from(setT).sort((a, b) => a - b);
   }
 
-  // hide merged children (those that have merged_into set)
   function slotsForTray(tray) {
     return slots
       .filter((s) => s.tray === tray && !s.merged_into)
@@ -108,143 +118,57 @@ export default function RefillerMachineSlots() {
     const group = groupForRootSlot(rootSlot);
     if (group.length === 1) return displayCodeForSlot(rootSlot);
     const codes = group.map((s) => parseInt(displayCodeForSlot(s), 10));
-    const minC = Math.min(...codes);
-    const maxC = Math.max(...codes);
-    return `${minC}-${maxC}`;
+    return `${Math.min(...codes)}-${Math.max(...codes)}`;
   }
 
-  function getSelectedProductId(slot) {
-    if (slot.product_id) return slot.product_id;
-    if (slot.product_name) {
-      const match = products.find((p) => p.name === slot.product_name);
-      if (match) return match.id;
-    }
-    return "";
-  }
-
-  // -----------------------
-  // Editor open/close
-  // -----------------------
+  // --- Editor Logic ---
   function openSlotEditor(slot) {
-    // slot is root (not merged_into). create a local clone with 'original' snapshot
     const clone = {
       ...slot,
       capacity: slot.capacity == null ? "" : slot.capacity,
       current_qty: slot.current_qty == null ? "" : slot.current_qty,
-      product_id: getSelectedProductId(slot),
-      __original: {
-        capacity: slot.capacity,
-        current_qty: slot.current_qty,
-        product_id: getSelectedProductId(slot),
-        product_name: slot.product_name || "",
-      },
+      product_id: slot.product_id || "",
     };
     setEditingSlot(clone);
   }
 
-  function closeSlotEditor() {
-    setEditingSlot(null);
-  }
+  function closeSlotEditor() { setEditingSlot(null); }
 
-  function handleEditingFieldChange(field, value) {
-    if (!editingSlot) return;
-    setEditingSlot((prev) => {
-      if (!prev) return prev;
-      if (field === "capacity" || field === "current_qty") {
-        return { ...prev, [field]: value === "" ? "" : Number(value) };
-      }
-      // product change: reset current_qty to 0 (as requested)
-      if (field === "product_id") {
-        return { ...prev, product_id: value, current_qty: 0 };
-      }
-      return { ...prev, [field]: value };
-    });
-  }
-
-  // Build field changes array for audit
-  function computeFieldChanges(original, updated) {
-    const changes = [];
-    if (original.product_id !== updated.product_id) {
-      changes.push({
-        field: "product_id",
-        old: original.product_id || null,
-        new: updated.product_id || null,
-      });
-    }
-    if ((original.capacity || 0) !== (updated.capacity || 0)) {
-      changes.push({
-        field: "capacity",
-        old: original.capacity || null,
-        new: updated.capacity || null,
-      });
-    }
-    if ((original.current_qty || 0) !== (updated.current_qty || 0)) {
-      changes.push({
-        field: "current_qty",
-        old: original.current_qty || null,
-        new: updated.current_qty || null,
-      });
-    }
-    return changes;
-  }
-
-  // -----------------------
-  // Save changes (refiller)
-  // -----------------------
   async function saveEditingSlot() {
     if (!editingSlot) return;
-    const { id, capacity, current_qty, product_id, __original } = editingSlot;
+    const { id, capacity, current_qty, product_id } = editingSlot;
 
-    // validation: current_qty <= capacity (block)
-    if (current_qty !== "" && capacity !== "" && Number(current_qty) > Number(capacity)) {
-      alert("Current quantity cannot be greater than capacity.");
+    if (Number(current_qty) > Number(capacity)) {
+      alert("Current quantity cannot exceed capacity.");
       return;
     }
 
     setSaving(true);
     try {
-      // Find product name if product_id is present
       const product = products.find((p) => p.id === product_id);
-
-      // Prepare payload
       const payload = {
         capacity: Number(capacity) || 0,
         current_qty: Number(current_qty) || 0,
-        product_id: product ? product.id : product_id || null,
-        product_name: product ? product.name : editingSlot.product_name || "",
+        product_id: product ? product.id : null,
+        product_name: product ? product.name : "",
         updatedAt: serverTimestamp(),
       };
 
-      // Update slot doc (if merged root, editing affects only root doc)
       await updateDoc(doc(db, "machines", machineId, "slots", id), payload);
 
-      // Write a refiller action / audit record
-      const fieldChanges = computeFieldChanges(
-        {
-          product_id: __original.product_id,
-          capacity: __original.capacity,
-          current_qty: __original.current_qty,
-        },
-        {
-          product_id: payload.product_id,
-          capacity: payload.capacity,
-          current_qty: payload.current_qty,
-        }
-      );
-
       await addDoc(collection(db, "refiller_actions"), {
-        actorUid: myUID || null,
-        actorEmail: myEmail || null,
+        actorUid: user.uid,
+        actorEmail: user.email,
         machineId,
         slotId: id,
-        fieldChanges,
+        action: "UPDATE_SLOT",
+        changes: payload,
         createdAt: serverTimestamp(),
       });
 
-      // reload
       await loadAll();
-      alert("Slot saved.");
       closeSlotEditor();
+      alert("Slot updated successfully.");
     } catch (e) {
       console.error("Failed to save slot", e);
       alert("Error saving slot.");
@@ -253,103 +177,86 @@ export default function RefillerMachineSlots() {
     }
   }
 
-  if (loading || !machine) {
-    return (
-      <div style={{ padding: 24 }}>
-        <button onClick={() => nav(-1)} style={btnBack}>
-          ← Back
-        </button>
-        <p style={{ marginTop: 12 }}>Loading machine...</p>
-      </div>
-    );
-  }
+  if (loading) return <div style={{ padding: 24 }}>Loading inventory...</div>;
 
   const trays = traysFromSlots();
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <button onClick={() => nav(-1)} style={btnBack}>
-          ← Back
+      {/* HEADER */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+        <button onClick={() => nav(`/refiller/machines/${machineId}`)} style={btnBack}>
+          ← Back to Machine
         </button>
-
-        <div style={{ textAlign: "center" }}>
-          <h2 style={{ margin: 0 }}>Machine – {machine.id}</h2>
-          <p style={{ margin: 4, color: "#666" }}>{machine.name || ""} · {machine.location || ""}</p>
-        </div>
-
-        <div style={{ textAlign: "right", fontSize: 13 }}>
-          <div><b>Trays:</b> {trays.length || "-"}</div>
-          <div><b>Total slots:</b> {slots.length}</div>
-          <div><b>Status:</b> {machine.status || "-"}</div>
-        </div>
+        <div><h2 style={{margin:0}}>Inventory: {machine?.name}</h2></div>
+        <div />
       </div>
 
-      <div style={{ marginBottom: 14, padding: 10, borderRadius: 8, background: "#fff7e6", border: "1px solid #ffe0a3", color: "#8a5a00" }}>
-        You can update product, capacity and current quantity for slots assigned to you. Capacity is shown as single-slot capacity even for merged lanes.
+      {/* TRAYS GRID */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {trays.map((tray) => (
+          <div key={tray} style={trayRow}>
+            <div style={trayLabel}>Tray {tray}</div>
+            <div style={slotsRow}>
+              {slotsForTray(tray).map((slot) => {
+                const label = displayCodeRange(slot);
+                const prodName = slot.product_name || "Empty";
+                return (
+                  <div key={slot.id} style={slotPill} onClick={() => openSlotEditor(slot)}>
+                    <div style={{ fontWeight: "bold" }}>{label}</div>
+                    <div style={{ fontSize: 12 }}>{prodName}</div>
+                    <div style={{ fontSize: 11, color: "#666" }}>
+                      {slot.current_qty || 0} / {slot.capacity || 0}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Horizontal trays */}
-      {trays.length === 0 ? (
-        <div style={card}><p>No slots configured for this machine.</p></div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {trays.map((tray) => {
-            const traySlots = slotsForTray(tray);
-            return (
-              <div key={tray} style={trayRow}>
-                <div style={trayLabel}>Tray {tray}</div>
-                <div style={slotsRow}>
-                  {traySlots.map((slot) => {
-                    const group = groupForRootSlot(slot);
-                    const label = displayCodeRange(slot);
-                    const primaryProduct = slot.product_name || "Empty";
-
-                    return (
-                      <div key={slot.id} style={slotPill} onClick={() => openSlotEditor(slot)} title={group.length > 1 ? `${label} · merged (${group.length} slots)` : label}>
-                        <div style={{ fontWeight: 700, fontSize: 13 }}>{label}</div>
-                        <div style={{ fontSize: 12, color: primaryProduct === "Empty" ? "#999" : "#222" }}>{primaryProduct}</div>
-                        <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>{slot.current_qty ?? 0}/{slot.capacity ?? 0}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Editor modal */}
+      {/* EDITOR MODAL */}
       {editingSlot && (
         <div style={modalBackdrop}>
           <div style={modalBox}>
-            <h3 style={{ marginTop: 0 }}>Edit {displayCodeRange(editingSlot)}</h3>
-            <div style={{ color: "#666", marginBottom: 8 }}>Tray {editingSlot.tray} · internal ID: {editingSlot.id}</div>
+            <h3>Edit Slot</h3>
+            <label style={labelStyle}>Product</label>
+            <select
+              style={inputStyle}
+              value={editingSlot.product_id}
+              onChange={(e) => setEditingSlot({ ...editingSlot, product_id: e.target.value })}
+            >
+              <option value="">-- Empty --</option>
+              {products.map((p) => (
+                // 🟢 DISPLAY: [SKU] Product Name
+                <option key={p.id} value={p.id}>
+                   {p.sku ? `[${p.sku}] ` : ""} {p.name}
+                </option>
+              ))}
+            </select>
 
-            <div style={field}>
-              <label>Product</label>
-              <select value={editingSlot.product_id || ""} onChange={(e) => handleEditingFieldChange("product_id", e.target.value)} style={inputSelect}>
-                <option value="">-- Empty --</option>
-                {products.map((p) => (<option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ""}</option>))}
-              </select>
-              <small style={{ color: "#666" }}>Changing product resets current quantity to 0.</small>
-            </div>
+            <label style={labelStyle}>Capacity</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={editingSlot.capacity}
+              onChange={(e) => setEditingSlot({ ...editingSlot, capacity: e.target.value })}
+            />
 
-            <div style={field}>
-              <label>Capacity</label>
-              <input type="number" min="0" value={editingSlot.capacity} onChange={(e) => handleEditingFieldChange("capacity", e.target.value)} style={inputNumber} />
-            </div>
+            <label style={labelStyle}>Current Quantity</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={editingSlot.current_qty}
+              onChange={(e) => setEditingSlot({ ...editingSlot, current_qty: e.target.value })}
+            />
 
-            <div style={field}>
-              <label>Current quantity</label>
-              <input type="number" min="0" value={editingSlot.current_qty} onChange={(e) => handleEditingFieldChange("current_qty", e.target.value)} style={inputNumber} />
-              <small style={{ color: "#666" }}>Cannot be greater than capacity.</small>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-              <button onClick={closeSlotEditor} style={btnCancel} disabled={saving}>Cancel</button>
-              <button onClick={saveEditingSlot} style={btnSave} disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+            <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button onClick={closeSlotEditor} style={btnCancel}>Cancel</button>
+              <button onClick={saveEditingSlot} disabled={saving} style={btnSave}>
+                {saving ? "Saving..." : "Save Changes"}
+              </button>
             </div>
           </div>
         </div>
@@ -358,77 +265,15 @@ export default function RefillerMachineSlots() {
   );
 }
 
-/* styles reused (match admin) */
-const card = {
-  background: "#fff",
-  padding: 16,
-  borderRadius: 12,
-  boxShadow: "0 4px 16px rgba(0,0,0,0.07)",
-};
-
-const trayRow = {
-  ...card,
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
-};
-
-const trayLabel = {
-  minWidth: 100,
-  fontWeight: 700,
-  fontSize: 15,
-  color: "#111",
-};
-
-const slotsRow = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 10,
-};
-
-const slotPill = {
-  minWidth: 96,
-  padding: "8px 10px",
-  borderRadius: 10,
-  background: "#f5f7fb",
-  border: "1px solid #dde3f0",
-  cursor: "pointer",
-  fontSize: 13,
-  textAlign: "center",
-};
-
-const btnBack = {
-  padding: "6px 12px",
-  border: "none",
-  borderRadius: 6,
-  background: "#111",
-  color: "#fff",
-  cursor: "pointer",
-};
-
-const modalBackdrop = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.45)",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  zIndex: 9999,
-};
-
-const modalBox = {
-  background: "#fff",
-  padding: 20,
-  borderRadius: 10,
-  width: 480,
-  maxHeight: "90vh",
-  overflowY: "auto",
-  boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
-};
-
-const field = { marginBottom: 10, display: "flex", flexDirection: "column", gap: 6, fontSize: 13 };
-const inputSelect = { width: "100%", padding: "8px", borderRadius: 6, border: "1px solid #ccc", fontSize: 13 };
-const inputNumber = { width: "100%", padding: "8px", borderRadius: 6, border: "1px solid #ccc", fontSize: 13 };
-const btnCancel = { padding: "8px 12px", background: "#999", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" };
-const btnSave = { padding: "8px 12px", background: "#27ae60", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 700 };
-
+// Styles (Kept exactly as requested)
+const btnBack = { background: "#eee", border: "none", padding: "8px 12px", borderRadius: 4, cursor: "pointer" };
+const trayRow = { background: "#fff", padding: 16, borderRadius: 8, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" };
+const trayLabel = { fontWeight: "bold", marginBottom: 8, color: "#555" };
+const slotsRow = { display: "flex", flexWrap: "wrap", gap: 10 };
+const slotPill = { border: "1px solid #ddd", borderRadius: 8, padding: "8px", minWidth: 80, textAlign: "center", cursor: "pointer", background: "#fafafa" };
+const modalBackdrop = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 };
+const modalBox = { background: "#fff", padding: 24, borderRadius: 8, width: 400 };
+const labelStyle = { display: "block", marginTop: 12, marginBottom: 4, fontWeight: 500 };
+const inputStyle = { width: "100%", padding: 8, borderRadius: 4, border: "1px solid #ccc", boxSizing: "border-box" };
+const btnCancel = { background: "#999", color: "#fff", border: "none", padding: "10px 16px", borderRadius: 4, cursor: "pointer" };
+const btnSave = { background: "#1e88e5", color: "#fff", border: "none", padding: "10px 16px", borderRadius: 4, cursor: "pointer" };

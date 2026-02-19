@@ -2,73 +2,92 @@
 import React, { useEffect, useState } from "react";
 import {
   collection,
-  getDocs,
   updateDoc,
   doc,
   onSnapshot,
   query,
   where,
+  addDoc,
+  serverTimestamp
 } from "firebase/firestore";
 import { db } from "../../firebaseClient";
+import { useAdmin } from "../../contexts/AdminContext";
 
 export default function AdminAssignMachines() {
+  const { user, orgId } = useAdmin(); // 🟢 SECURE: Get orgId
   const [refillers, setRefillers] = useState([]);
   const [machines, setMachines] = useState([]);
 
   const [selectedRefiller, setSelectedRefiller] = useState("");
   const [assigning, setAssigning] = useState(false);
 
-  // LIVE: load all refillers (users with role = refiller)
+  // 🟢 SECURE LIVE: load all refillers for THIS ORG ONLY
   useEffect(() => {
-    const q = query(collection(db, "users"), where("role", "==", "refiller"));
+    if (!orgId) return;
+    const q = query(
+      collection(db, "users"), 
+      where("role", "==", "refiller"),
+      where("orgId", "==", orgId),
+      where("deleted", "==", false)
+    );
 
     const unsub = onSnapshot(q, (snap) => {
-      setRefillers(
-        snap.docs.map((d) => ({
-          uid: d.id,
-          ...d.data(),
-        }))
-      );
+      setRefillers(snap.docs.map((d) => ({ uid: d.id, ...d.data() })));
     });
 
     return () => unsub();
-  }, []);
+  }, [orgId]);
 
-  // LIVE: load all machines
+  // 🟢 SECURE LIVE: load all machines for THIS ORG ONLY
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "machines"), (snap) => {
-      setMachines(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }))
-      );
+    if (!orgId) return;
+    const q = query(
+        collection(db, "machines"),
+        where("orgId", "==", orgId),
+        where("deleted", "==", false)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      setMachines(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
 
     return () => unsub();
-  }, []);
+  }, [orgId]);
 
-  // FILTER UNASSIGNED MACHINES
   const unassignedMachines = machines.filter((m) => !m.assignedTo);
+  const assignedMachines = machines.filter((m) => m.assignedTo);
 
   // ASSIGN MACHINE
-  async function assignMachine(machineId) {
+  async function assignMachine(machineId, machineName) {
     if (!selectedRefiller) {
-      alert("Select a refiller first.");
+      alert("Please select a refiller from the dropdown first.");
       return;
     }
 
     try {
       setAssigning(true);
+      const refiller = refillers.find(r => r.uid === selectedRefiller);
 
       await updateDoc(doc(db, "machines", machineId), {
         assignedTo: selectedRefiller,
+        assignedEmail: refiller?.email || "",
+        assignedAt: serverTimestamp()
       });
 
-      alert("Machine assigned successfully!");
+      // 🟢 Audit Log
+      await addDoc(collection(db, "admin_actions"), {
+        actionType: "machine_assigned",
+        machineId,
+        machineName,
+        assignedToUid: selectedRefiller,
+        assignedToEmail: refiller?.email,
+        actorEmail: user.email,
+        orgId: orgId,
+        createdAt: serverTimestamp()
+      });
 
     } catch (err) {
-      console.error(err);
+      console.error("Failed to assign machine:", err);
       alert("Failed to assign machine.");
     } finally {
       setAssigning(false);
@@ -76,13 +95,26 @@ export default function AdminAssignMachines() {
   }
 
   // REMOVE ASSIGNMENT
-  async function unassignMachine(machineId) {
+  async function unassignMachine(machineId, machineName, currentRefillerUid) {
+    if(!window.confirm(`Unassign this machine?`)) return;
     try {
       await updateDoc(doc(db, "machines", machineId), {
-        assignedTo: "",
+        assignedTo: null,
+        assignedEmail: null,
+        assignedAt: serverTimestamp()
       });
 
-      alert("Machine unassigned.");
+      // 🟢 Audit Log
+      await addDoc(collection(db, "admin_actions"), {
+        actionType: "machine_unassigned",
+        machineId,
+        machineName,
+        removedFromUid: currentRefillerUid,
+        actorEmail: user.email,
+        orgId: orgId,
+        createdAt: serverTimestamp()
+      });
+
     } catch (err) {
       console.error(err);
       alert("Failed to unassign.");
@@ -90,145 +122,99 @@ export default function AdminAssignMachines() {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Assign Machines to Refillers</h1>
+    <div style={{ padding: 24 }}>
+      <h1 style={{ marginBottom: 20 }}>Assign Route (Machines)</h1>
 
       {/* SELECT REFILLER */}
-      <div style={{ marginTop: 20 }}>
-        <label style={{ fontWeight: 600 }}>Select Refiller:</label>
+      <div style={card}>
+        <label style={{ fontWeight: 600, fontSize: 16, display: "block", marginBottom: 10 }}>
+          1. Select a Refiller
+        </label>
         <select
           value={selectedRefiller}
           onChange={(e) => setSelectedRefiller(e.target.value)}
-          style={{
-            marginLeft: 10,
-            padding: 8,
-            borderRadius: 6,
-            border: "1px solid #aaa",
-          }}
+          style={selectStyle}
         >
-          <option value="">-- choose refiller --</option>
+          <option value="">-- Choose a refiller --</option>
           {refillers.map((r) => (
             <option key={r.uid} value={r.uid}>
-              {r.displayName || r.email}
+              {r.displayName || "No Name"} ({r.email})
             </option>
           ))}
         </select>
       </div>
 
-      {/* UNASSIGNED MACHINES TABLE */}
-      <h2 style={{ marginTop: 30 }}>Unassigned Machines</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginTop: 24 }}>
+        
+        {/* LEFT COL: UNASSIGNED MACHINES */}
+        <div>
+            <h2 style={{ fontSize: 18, marginBottom: 15, color: "#e65100" }}>⚠️ Unassigned Machines ({unassignedMachines.length})</h2>
+            
+            {unassignedMachines.length === 0 && (
+                <div style={emptyBox}>All machines are assigned!</div>
+            )}
 
-      {unassignedMachines.length === 0 && (
-        <p>No unassigned machines found.</p>
-      )}
-
-      {unassignedMachines.length > 0 && (
-        <table
-          style={{
-            width: "100%",
-            marginTop: 10,
-            borderCollapse: "collapse",
-            background: "#fff",
-          }}
-        >
-          <thead style={{ background: "#eee" }}>
-            <tr>
-              <th style={th}>Machine ID</th>
-              <th style={th}>Name</th>
-              <th style={th}>Location</th>
-              <th style={th}>Action</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {unassignedMachines.map((m) => (
-              <tr key={m.id} style={{ borderBottom: "1px solid #ddd" }}>
-                <td style={td}>{m.id}</td>
-                <td style={td}>{m.name}</td>
-                <td style={td}>{m.location}</td>
-
-                <td style={td}>
-                  <button
-                    disabled={assigning}
-                    style={assignBtn}
-                    onClick={() => assignMachine(m.id)}
-                  >
-                    Assign →
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {/* ALREADY ASSIGNED MACHINES */}
-      <h2 style={{ marginTop: 40 }}>Assigned Machines</h2>
-
-      {machines.filter((m) => m.assignedTo).length === 0 && (
-        <p>No machines assigned to any refiller.</p>
-      )}
-
-      {machines
-        .filter((m) => m.assignedTo)
-        .map((m) => {
-          const assignedUser = refillers.find(r => r.uid === m.assignedTo);
-
-          return (
-            <div
-              key={m.id}
-              style={{
-                marginBottom: 12,
-                padding: 16,
-                border: "1px solid #ddd",
-                borderRadius: 8,
-              }}
-            >
-              <b>{m.name}</b> – {m.location}
-              <br />
-              <small>
-                Assigned To: {assignedUser?.displayName || assignedUser?.email}
-              </small>
-
-              <button
-                style={removeBtn}
-                onClick={() => unassignMachine(m.id)}
-              >
-                Unassign
-              </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {unassignedMachines.map((m) => (
+                    <div key={m.id} style={machineCard}>
+                        <div>
+                            <div style={{ fontWeight: "bold", fontSize: 15 }}>{m.name || m.id}</div>
+                            <div style={{ fontSize: 13, color: "#666" }}>📍 {m.location || "No location"}</div>
+                        </div>
+                        <button
+                            disabled={assigning || !selectedRefiller}
+                            style={selectedRefiller ? btnGreen : btnDisabled}
+                            onClick={() => assignMachine(m.id, m.name)}
+                        >
+                            Assign →
+                        </button>
+                    </div>
+                ))}
             </div>
-          );
-        })}
+        </div>
+
+        {/* RIGHT COL: ASSIGNED MACHINES */}
+        <div>
+            <h2 style={{ fontSize: 18, marginBottom: 15, color: "#2e7d32" }}>✅ Assigned Machines ({assignedMachines.length})</h2>
+            
+            {assignedMachines.length === 0 && (
+                <div style={emptyBox}>No machines assigned yet.</div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {assignedMachines.map((m) => {
+                    const assignedUser = refillers.find(r => r.uid === m.assignedTo);
+                    return (
+                        <div key={m.id} style={machineCard}>
+                            <div>
+                                <div style={{ fontWeight: "bold", fontSize: 15 }}>{m.name || m.id}</div>
+                                <div style={{ fontSize: 13, color: "#1976d2", fontWeight: "bold", marginTop: 4 }}>
+                                    👤 {assignedUser?.displayName || m.assignedEmail || m.assignedTo}
+                                </div>
+                            </div>
+                            <button
+                                style={btnDanger}
+                                onClick={() => unassignMachine(m.id, m.name, m.assignedTo)}
+                            >
+                                Unassign
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+
+      </div>
     </div>
   );
 }
 
 /* Styles */
-const th = {
-  textAlign: "left",
-  padding: 10,
-  fontWeight: 700,
-};
+const card = { background: "#fff", padding: 20, borderRadius: 12, border: "1px solid #e2e8f0" };
+const machineCard = { background: "#fff", border: "1px solid #e2e8f0", padding: 15, borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center" };
+const emptyBox = { background: "#f8fafc", padding: 30, textAlign: "center", borderRadius: 8, color: "#64748b", border: "1px dashed #cbd5e1" };
+const selectStyle = { width: "100%", maxWidth: "400px", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "15px" };
 
-const td = {
-  padding: 10,
-};
-
-const assignBtn = {
-  padding: "6px 12px",
-  background: "#2ecc71",
-  color: "#fff",
-  border: "none",
-  borderRadius: 6,
-  cursor: "pointer",
-};
-
-const removeBtn = {
-  marginLeft: 12,
-  padding: "6px 12px",
-  background: "#e74c3c",
-  color: "#fff",
-  border: "none",
-  borderRadius: 6,
-  cursor: "pointer",
-};
+const btnGreen = { padding: "8px 16px", background: "#10b981", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const btnDisabled = { padding: "8px 16px", background: "#e2e8f0", color: "#94a3b8", border: "none", borderRadius: 6, cursor: "not-allowed", fontWeight: "bold" };
+const btnDanger = { padding: "8px 16px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };

@@ -1,84 +1,98 @@
 import React, { useEffect, useState } from "react";
-import { Link, Outlet } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "../firebaseClient";
+import { signOut } from "firebase/auth";
+import { db, auth } from "../firebaseClient";
 import { useAdmin } from "../contexts/AdminContext";
 
 export default function AdminLayout() {
-  const { orgId } = useAdmin();
+  const { orgId, user } = useAdmin();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [orgStatus, setOrgStatus] = useState({ suspended: false, deleted: false });
 
   useEffect(() => {
     if (!orgId) return;
-
-    // Listen for real-time changes to the organization status
     const unsub = onSnapshot(doc(db, "organisations", orgId), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        setOrgStatus({
-          suspended: data.suspended || false,
-          deleted: data.deleted || false
-        });
+        setOrgStatus({ suspended: data.suspended || false, deleted: data.deleted || false });
       }
     });
-
     return () => unsub();
   }, [orgId]);
 
+  async function handleLogout() {
+    await signOut(auth);
+    navigate("/login", { replace: true });
+  }
+
   const isBlocked = orgStatus.suspended || orgStatus.deleted;
+
+  const isActive = (path) => {
+    if (path === "/admin" && location.pathname === "/admin") return true;
+    if (path !== "/admin" && location.pathname.startsWith(path)) return true;
+    return false;
+  };
+
+  const NavLink = ({ to, label, icon }) => (
+    <Link 
+      to={to} 
+      style={{
+        ...linkStyle, 
+        background: isActive(to) ? "rgba(11, 195, 255, 0.15)" : "transparent",
+        color: isActive(to) ? "#0bc3ff" : "#eee",
+        borderLeft: isActive(to) ? "4px solid #0bc3ff" : "4px solid transparent"
+      }}
+    >
+      <span style={{ marginRight: 10 }}>{icon}</span> {label}
+    </Link>
+  );
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#f4f7f6" }}>
-
       {/* LEFT SIDEBAR */}
-      <div style={{
-        width: 240,
-        background: "#111",
-        color: "#fff",
-        padding: "20px 12px",
-        position: "fixed",
-        height: "100vh",
-        overflowY: "auto" // Added scroll in case menu gets long
-      }}>
-        <h2 style={{ color: "#0bc3ff", marginBottom: 30 }}>Admin Panel</h2>
+      <div style={sidebarStyle}>
+        <div style={{ marginBottom: 30, padding: "0 10px" }}>
+          <h2 style={{ color: "#0bc3ff", margin: "0 0 5px 0", letterSpacing: 1 }}>ADMIN PANEL</h2>
+          <div style={{ fontSize: 12, color: "#90caf9", wordBreak: "break-all" }}>{user?.email}</div>
+          <div style={{ fontSize: 11, color: "#777", marginTop: 4, fontFamily: "monospace" }}>ORG: {orgId}</div>
+        </div>
 
-        <nav style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <Link to="/admin" style={linkStyle}>Dashboard</Link>
+        <nav style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <NavLink to="/admin" label="Dashboard" icon="📊" />
+          <NavLink to="/admin/issues" label="Machine Issues" icon="🚨" />
           
-          {/* 🟢 NEW LINK: Machine Issues */}
-          <Link to="/admin/issues" style={linkStyle}>🚨 Machine Issues</Link>
-
-          <div>
-            <div style={{ color: "#777", fontSize: 11, padding: "10px 12px", textTransform: "uppercase", letterSpacing: 1 }}>Inventory</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 6 }}>
-              <Link to="/admin/machines" style={subLinkStyle}>All Machines</Link>
-              <Link to="/admin/machines/assign" style={subLinkStyle}>Assign Machines</Link>
-            </div>
+          <div style={{ margin: "10px 0" }}>
+            <div style={{ color: "#777", fontSize: 11, padding: "0 12px", textTransform: "uppercase", letterSpacing: 1, marginBottom: 5 }}>Inventory</div>
+            <NavLink to="/admin/machines" label="All Machines" icon="🤖" />
+            <NavLink to="/admin/machines/assign" label="Assign Route" icon="📍" />
           </div>
 
-          <Link to="/admin/products" style={linkStyle}>Manage Products</Link>
-          <Link to="/admin/refill-logs" style={linkStyle}>Refill Logs</Link>
-          <Link to="/admin/audit-logs" style={linkStyle}>Audit Logs</Link>
-          <Link to="/admin/users" style={linkStyle}>Users</Link>
+          <NavLink to="/admin/products" label="Products" icon="🍫" />
+          <NavLink to="/admin/refill-logs" label="Refill Logs" icon="📦" />
+          <NavLink to="/admin/audit-logs" label="Audit Logs" icon="📋" />
+          <NavLink to="/admin/users" label="Team (Refillers)" icon="👔" />
         </nav>
+
+        <button onClick={handleLogout} style={logoutStyle}>
+          🚪 Logout
+        </button>
       </div>
 
       {/* RIGHT CONTENT AREA */}
-      <div style={{ flex: 1, marginLeft: 240, padding: 0 }}>
-        
-        {/* 🚨 SUSPENSION BANNER */}
+      <div style={{ flex: 1, height: "100vh", overflowY: "auto", overflowX: "auto" }}>
         {isBlocked && (
           <div style={suspendedBanner}>
             <div style={{ fontSize: 20 }}>⚠️</div>
             <div>
-              <strong>Organisation Access Restricted:</strong> Your organisation ({orgId}) has been 
+              <strong>Organisation Restricted:</strong> Your organisation ({orgId}) has been 
               {orgStatus.deleted ? " deleted " : " suspended "} by the system administrator. 
-              Operations and data updates may be restricted.
+              Operations are locked.
             </div>
           </div>
         )}
-
-        <div style={{ padding: 30 }}>
+        <div style={{ padding: 30, boxSizing: "border-box" }}>
           <Outlet />
         </div>
       </div>
@@ -87,39 +101,19 @@ export default function AdminLayout() {
 }
 
 /* ───────── STYLES ───────── */
-
-const linkStyle = {
-  color: "#eee",
-  textDecoration: "none",
-  padding: "10px 12px",
-  borderRadius: 6,
-  background: "transparent",
-  display: "block",
-  transition: "background 0.2s",
-  fontSize: 14
-};
-
-const subLinkStyle = {
-  color: "#aaa",
-  textDecoration: "none",
-  padding: "8px 10px",
-  borderRadius: 6,
-  background: "transparent",
-  display: "block",
-  fontSize: 13,
-  transition: "color 0.2s"
-};
-
-const suspendedBanner = {
-  background: "#fff1f2",
-  color: "#be123c",
-  padding: "16px 24px",
-  borderBottom: "2px solid #fda4af",
+const sidebarStyle = {
+  width: 260,
+  minWidth: 260, // 🟢 Forces exact width
+  flexShrink: 0, // 🟢 Prevents Flexbox from shrinking the sidebar
+  background: "#111",
+  color: "#fff",
+  padding: "30px 12px",
   display: "flex",
-  alignItems: "center",
-  gap: 15,
-  fontWeight: 500,
-  position: "sticky",
-  top: 0,
-  zIndex: 100
+  flexDirection: "column",
+  boxShadow: "4px 0 15px rgba(0,0,0,0.1)",
+  zIndex: 10
 };
+
+const linkStyle = { textDecoration: "none", padding: "12px 16px", borderRadius: "0 8px 8px 0", fontWeight: 600, transition: "all 0.2s ease", display: "flex", alignItems: "center", fontSize: 14 };
+const logoutStyle = { marginTop: "auto", padding: "12px", background: "rgba(229, 57, 53, 0.1)", border: "1px solid rgba(229, 57, 53, 0.3)", color: "#ef5350", borderRadius: 8, fontWeight: "bold", cursor: "pointer", width: "100%", transition: "all 0.2s ease" };
+const suspendedBanner = { background: "#fff1f2", color: "#be123c", padding: "16px 24px", borderBottom: "2px solid #fda4af", display: "flex", alignItems: "center", gap: 15, fontWeight: 500, position: "sticky", top: 0, zIndex: 100 };

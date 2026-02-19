@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import {
   collection,
-  getDocs,
   query,
   where,
   Timestamp,
+  getCountFromServer // 🟢 Production upgrade! Saves 99% on read costs
 } from "firebase/firestore";
 import { db } from "../firebaseClient";
 
@@ -14,12 +14,7 @@ export function useSuperAdminKPIs() {
 
   const [kpis, setKpis] = useState({
     totalOrganisations: 0,
-    activeOrganisations: 0,
-    suspendedOrganisations: 0,
     totalMachines: 0,
-    assignedMachines: 0,
-    unassignedMachines: 0,
-    disabledMachines: 0,
     totalAdmins: 0,
     totalRefillers: 0,
     totalRefills: 0,
@@ -39,55 +34,30 @@ export function useSuperAdminKPIs() {
         new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
       );
 
+      // 🟢 GET COUNT FROM SERVER (Costs 1 read per metric, instead of 1 read per document!)
       const [
-        orgSnap,
-        machineSnap,
-        adminSnap,
-        refillerSnap,
-        refillSnap,
-        recentRefillSnap,
+        orgCount,
+        machineCount,
+        adminCount,
+        refillerCount,
+        refillCount,
+        recentRefillCount,
       ] = await Promise.all([
-        getDocs(collection(db, "organisations")),
-        getDocs(collection(db, "machines")),
-        getDocs(query(collection(db, "users"), where("role", "==", "admin"))),
-        getDocs(query(collection(db, "users"), where("role", "==", "refiller"))),
-        getDocs(collection(db, "refill_logs")),
-        getDocs(
-          query(
-            collection(db, "refill_logs"),
-            where("createdAt", ">=", sevenDaysAgo)
-          )
-        ),
+        getCountFromServer(collection(db, "organisations")),
+        getCountFromServer(collection(db, "machines")),
+        getCountFromServer(query(collection(db, "users"), where("role", "==", "admin"))),
+        getCountFromServer(query(collection(db, "users"), where("role", "==", "refiller"))),
+        getCountFromServer(collection(db, "refill_logs")),
+        getCountFromServer(query(collection(db, "refill_logs"), where("createdAt", ">=", sevenDaysAgo))),
       ]);
 
-      let activeOrgs = 0;
-      let suspendedOrgs = 0;
-      orgSnap.forEach((d) => {
-        d.data().status === "active" ? activeOrgs++ : suspendedOrgs++;
-      });
-
-      let assigned = 0;
-      let unassigned = 0;
-      let disabled = 0;
-      machineSnap.forEach((d) => {
-        const m = d.data();
-        if (m.status === "disabled") disabled++;
-        else if (m.assigned) assigned++;
-        else unassigned++;
-      });
-
       setKpis({
-        totalOrganisations: orgSnap.size,
-        activeOrganisations: activeOrgs,
-        suspendedOrganisations: suspendedOrgs,
-        totalMachines: machineSnap.size,
-        assignedMachines: assigned,
-        unassignedMachines: unassigned,
-        disabledMachines: disabled,
-        totalAdmins: adminSnap.size,
-        totalRefillers: refillerSnap.size,
-        totalRefills: refillSnap.size,
-        refillsLast7Days: recentRefillSnap.size,
+        totalOrganisations: orgCount.data().count,
+        totalMachines: machineCount.data().count,
+        totalAdmins: adminCount.data().count,
+        totalRefillers: refillerCount.data().count,
+        totalRefills: refillCount.data().count,
+        refillsLast7Days: recentRefillCount.data().count,
       });
     } catch (err) {
       console.error("❌ KPI load failed", err);
@@ -97,7 +67,6 @@ export function useSuperAdminKPIs() {
     }
   }
 
-  // Returning 'stats' to match your component's destructuring
   return { 
     kpis, 
     stats: {

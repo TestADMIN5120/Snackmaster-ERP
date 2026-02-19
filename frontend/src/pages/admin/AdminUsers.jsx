@@ -13,7 +13,7 @@ import { useAdmin } from "../../contexts/AdminContext";
 import { createSecondaryUser } from "../../utils/authHelpers"; 
 
 export default function AdminUsers() {
-  const { user, role, orgId } = useAdmin(); 
+  const { user, orgId } = useAdmin(); 
   const [users, setUsers] = useState([]);
 
   const [showAdd, setShowAdd] = useState(false);
@@ -25,28 +25,26 @@ export default function AdminUsers() {
   const [editingUser, setEditingUser] = useState(null);
   const [editName, setEditName] = useState("");
 
-  // LOAD USERS (Filtered by Org for Admins)
+  // LOAD REFILLERS FOR THIS ORG
   useEffect(() => {
-    if (!orgId && role !== 'super_admin') return;
+    if (!orgId) return;
 
-    let q;
-    if (role === "super_admin") {
-      q = collection(db, "users");
-    } else {
-      // 🟢 Admin only sees users in their Org
-      q = query(collection(db, "users"), where("orgId", "==", orgId)); 
-    }
+    // 🟢 SECURE QUERY: Only Refillers in my Org
+    const q = query(
+        collection(db, "users"), 
+        where("orgId", "==", orgId),
+        where("role", "==", "refiller")
+    ); 
 
     const unsub = onSnapshot(q, (snap) => {
       setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     }, (error) => {
       console.error("❌ Read Error:", error);
-      // Don't alert continuously, just log
     });
     return () => unsub();
-  }, [orgId, role]);
+  }, [orgId]);
 
-  // 🟢 ADD NEW REFILLER
+  // 🟢 ADD NEW REFILLER (SECURE CREATION)
   async function createRefiller() {
     const emailClean = newEmail.trim();
     const passClean = newPassword;
@@ -61,12 +59,14 @@ export default function AdminUsers() {
         displayName: newName,
         role: "refiller", // 🔒 Forced Role
         orgId: orgId, // 🔒 Forced Org
-        createdBy: user.email
+        createdBy: user.email,
+        status: "active", // 🟢 CRITICAL: Allows login
+        deleted: false    // 🟢 CRITICAL: Prevents ghosting
       };
 
       await createSecondaryUser(emailClean, passClean, userData);
 
-      alert("Refiller created successfully!");
+      alert(`✅ Refiller created!\n\nEmail: ${emailClean}\nPassword: ${passClean}\n\nThey can now log into the Refiller App.`);
       setShowAdd(false);
       setNewEmail("");
       setNewPassword("");
@@ -76,8 +76,6 @@ export default function AdminUsers() {
       console.error(err);
       if (err.code === 'auth/email-already-in-use') {
         alert("Error: This email is already registered.");
-      } else if (err.code === 'permission-denied') {
-        alert("Error: Permission Denied. Check if your Admin account has a valid Organization ID.");
       } else {
         alert("Error: " + err.message);
       }
@@ -92,7 +90,7 @@ export default function AdminUsers() {
       await updateDoc(doc(db, "users", editingUser.id), {
         displayName: editName,
       });
-      alert("User updated!");
+      alert("Refiller updated!");
       setEditingUser(null);
     } catch (err) {
       console.error(err);
@@ -100,12 +98,16 @@ export default function AdminUsers() {
     }
   }
 
-  // DELETE USER
-  async function deleteUser(id) {
-    if (!confirm("Delete this user? They will lose access.")) return;
+  // SOFT DELETE USER (Don't hard delete, respect audit trails)
+  async function deleteUser(id, name) {
+    if (!confirm(`Remove ${name} from your team? They will no longer be able to log in.`)) return;
     try {
-      await deleteDoc(doc(db, "users", id));
-      alert("User deleted.");
+      // 🟢 SOFT DELETE
+      await updateDoc(doc(db, "users", id), {
+        deleted: true,
+        status: "disabled"
+      });
+      alert("Refiller removed.");
     } catch (err) {
       console.error(err);
       alert("Delete failed.");
@@ -113,97 +115,81 @@ export default function AdminUsers() {
   }
 
   return (
-    <div>
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-        <h1>Manage Team</h1>
+    <div style={{ padding: 24 }}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 20}}>
+        <h1>Manage Route Team (Refillers)</h1>
         <button onClick={() => setShowAdd(true)} style={addBtn}>+ Add Refiller</button>
       </div>
 
       {/* USERS TABLE */}
-      <table style={table}>
-        <thead style={{ background: "#eee" }}>
-          <tr>
-            <th style={th}>Name</th>
-            <th style={th}>Email</th>
-            <th style={th}>Role</th>
-            <th style={th}>Actions</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id} style={{ borderBottom: "1px solid #ddd" }}>
-              <td style={td}>{u.displayName || "-"}</td>
-              <td style={td}>{u.email}</td>
-              <td style={td}>
-                <span style={{
-                  padding:"4px 8px", 
-                  borderRadius:10, 
-                  background: u.role==='admin'?'#e3f2fd':'#f3e5f5',
-                  color: u.role==='admin'?'#1565c0':'#7b1fa2',
-                  fontSize:12, fontWeight:'bold'
-                }}>
-                  {u.role.toUpperCase()}
-                </span>
-              </td>
-
-              <td style={td}>
-                <button
-                  style={btnSecondary}
-                  onClick={() => {
-                    setEditingUser(u);
-                    setEditName(u.displayName || "");
-                  }}
-                >
-                  Edit
-                </button>
-
-                <button style={btnDanger} onClick={() => deleteUser(u.id)}>
-                  Delete
-                </button>
-              </td>
+      <div style={tableContainer}>
+        <table style={table}>
+            <thead style={{ background: "#f8fafc" }}>
+            <tr>
+                <th style={th}>Refiller Name</th>
+                <th style={th}>Email / Login</th>
+                <th style={th}>Role</th>
+                <th style={th}>Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+            </thead>
+
+            <tbody>
+            {users.filter(u => !u.deleted).map((u) => (
+                <tr key={u.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{...td, fontWeight: "bold"}}>{u.displayName || "-"}</td>
+                <td style={{...td, color: "#666"}}>{u.email}</td>
+                <td style={td}>
+                    <span style={badgeRefiller}>REFILLER</span>
+                </td>
+
+                <td style={td}>
+                    <button
+                    style={btnSecondary}
+                    onClick={() => {
+                        setEditingUser(u);
+                        setEditName(u.displayName || "");
+                    }}
+                    >
+                    Edit Name
+                    </button>
+
+                    <button style={btnDanger} onClick={() => deleteUser(u.id, u.displayName)}>
+                    Remove
+                    </button>
+                </td>
+                </tr>
+            ))}
+            </tbody>
+        </table>
+        {users.filter(u => !u.deleted).length === 0 && (
+            <div style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>You have no refillers on your team yet.</div>
+        )}
+      </div>
 
       {/* ADD REFILLER MODAL */}
       {showAdd && (
         <div style={modalOverlay}>
           <div style={modalBox}>
-            <h2>Add New Refiller</h2>
+            <h2 style={{marginTop: 0}}>Add Route Refiller</h2>
             
-            <input
-              placeholder="Refiller Name"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              style={input}
-            />
+            <label style={label}>Full Name</label>
+            <input placeholder="e.g. Mike Smith" value={newName} onChange={(e) => setNewName(e.target.value)} style={input} />
 
-            <input
-              placeholder="Email Address"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              style={input}
-            />
+            <label style={label}>Login Email</label>
+            <input type="email" placeholder="mike@company.com" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} style={input} />
 
-            <input
-              type="password"
-              placeholder="Set Password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              style={input}
-            />
+            <label style={label}>Temporary Password</label>
+            <input type="text" placeholder="Set Password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} style={input} />
 
-            <p style={{fontSize:12, color:'#666', marginBottom:15}}>
-              * Will be assigned to your organization automatically.
-            </p>
+            <div style={{background: "#e0f2fe", padding: 10, borderRadius: 6, fontSize: 12, color: "#0284c7", marginBottom: 15, border: "1px solid #bae6fd"}}>
+              ℹ️ This refiller will be permanently locked to your organization. They cannot see machines from other orgs.
+            </div>
 
-            <div style={{marginTop:15, display:'flex', gap:10}}>
+            <div style={{display:'flex', gap:10}}>
                 <button style={btnPrimary} onClick={createRefiller} disabled={loading}>
-                    {loading ? "Creating..." : "Create Refiller"}
+                    {loading ? "Creating..." : "Create Account"}
                 </button>
-                <button style={btnSecondary} onClick={() => setShowAdd(false)}>Cancel</button>
+                <button style={btnCancel} onClick={() => setShowAdd(false)}>Cancel</button>
             </div>
           </div>
         </div>
@@ -213,7 +199,8 @@ export default function AdminUsers() {
       {editingUser && (
         <div style={modalOverlay}>
           <div style={modalBox}>
-            <h2>Edit User</h2>
+            <h2 style={{marginTop: 0}}>Edit Refiller</h2>
+            <label style={label}>Full Name</label>
             <input
               placeholder="Name"
               value={editName}
@@ -221,8 +208,8 @@ export default function AdminUsers() {
               style={input}
             />
             <div style={{marginTop:15, display:'flex', gap:10}}>
-                <button style={btnPrimary} onClick={updateUser}>Save</button>
-                <button style={btnSecondary} onClick={() => setEditingUser(null)}>Cancel</button>
+                <button style={btnPrimary} onClick={updateUser}>Save Changes</button>
+                <button style={btnCancel} onClick={() => setEditingUser(null)}>Cancel</button>
             </div>
           </div>
         </div>
@@ -232,13 +219,19 @@ export default function AdminUsers() {
 }
 
 /* UI STYLES */
-const table = { width: "100%", marginTop: 20, borderCollapse: "collapse", background:'white', boxShadow:'0 2px 5px rgba(0,0,0,0.05)' };
-const th = { padding: 12, textAlign: "left", fontWeight: "bold", borderBottom:'2px solid #ddd' };
-const td = { padding: 12 };
-const btnPrimary = { padding: "10px 16px", background: "#3498db", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" };
-const btnSecondary = { padding: "8px 14px", background: "#95a5a6", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", marginRight: 5 };
-const btnDanger = { padding: "8px 14px", background: "#e74c3c", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" };
-const addBtn = { padding: "10px 16px", background: "#2ecc71", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" };
-const input = { padding: "10px", borderRadius: 6, border: "1px solid #ccc", marginBottom: 10, width: "100%", boxSizing:'border-box' };
-const modalOverlay = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 };
-const modalBox = { background: "#fff", padding: 30, borderRadius: 10, width: 400, boxShadow: "0 10px 25px rgba(0,0,0,0.2)" };
+const tableContainer = { background: "#fff", borderRadius: 12, boxShadow: "0 2px 10px rgba(0,0,0,0.05)", overflow: "hidden", border: "1px solid #e2e8f0" };
+const table = { width: "100%", borderCollapse: "collapse" };
+const th = { padding: 16, textAlign: "left", fontWeight: "bold", color: "#64748b", fontSize: 13, textTransform: "uppercase" };
+const td = { padding: 16, fontSize: 15 };
+const badgeRefiller = { padding:"4px 10px", borderRadius:12, background: '#f3e5f5', color: '#7b1fa2', fontSize:11, fontWeight:'bold' };
+
+const btnPrimary = { flex: 1, padding: "12px", background: "#1e88e5", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const btnCancel = { padding: "12px 20px", background: "#e2e8f0", color: "#475569", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const btnSecondary = { padding: "8px 14px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: 6, cursor: "pointer", marginRight: 8, fontWeight: "bold" };
+const btnDanger = { padding: "8px 14px", background: "#fee2e2", color: "#ef4444", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const addBtn = { padding: "10px 16px", background: "#10b981", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" };
+
+const label = { display: "block", fontSize: 13, fontWeight: "bold", color: "#475569", marginBottom: 5 };
+const input = { padding: "12px", borderRadius: 6, border: "1px solid #cbd5e1", marginBottom: 15, width: "100%", boxSizing:'border-box', fontSize: 15 };
+const modalOverlay = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.6)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 };
+const modalBox = { background: "#fff", padding: 24, borderRadius: 12, width: 400, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" };

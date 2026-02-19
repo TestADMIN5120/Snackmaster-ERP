@@ -1,6 +1,17 @@
-See README for quick start.
-1) Install Node 18+, npm
-2) For backend: set GOOGLE_APPLICATION_CREDENTIALS to your service account JSON path and run `node backend/seed.js` to seed data.
-3) Run backend locally: cd backend/functions && npm install && node index.js
-4) Run frontend: cd frontend && npm install && npm run dev
-5) Deploy functions using Firebase CLI and frontend to Render.
+# 🚀 Deployment & Setup Guide
+
+## 1. Prerequisites
+* Node.js v18+
+* Firebase CLI (`npm install -g firebase-tools`)
+* A Firebase Project with Firestore and Authentication (Email/Password) enabled.
+
+## 2. Environment Variables
+Create a `.env` file in the `frontend/` directory:
+```env
+VITE_FIREBASE_API_KEY="your_api_key"
+VITE_FIREBASE_AUTH_DOMAIN="your_project.firebaseapp.com"
+VITE_FIREBASE_PROJECT_ID="your_project_id"
+VITE_FIREBASE_STORAGE_BUCKET="your_project.appspot.com"
+VITE_FIREBASE_MESSAGING_SENDER_ID="123456789"
+VITE_FIREBASE_APP_ID="1:123:web:abc"
+VITE_ENV="production"

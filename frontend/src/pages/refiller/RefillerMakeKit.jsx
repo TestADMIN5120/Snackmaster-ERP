@@ -1,13 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Papa from "papaparse";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  collection,
-  serverTimestamp,
-} from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
 import { useParams, useNavigate } from "react-router-dom";
@@ -29,51 +22,37 @@ export default function RefillerMakeKit() {
       const docSnap = await getDoc(doc(db, "machines", machineId));
       if (docSnap.exists()) {
         setMachine({ id: docSnap.id, ...docSnap.data() });
+      } else {
+        alert("Machine not found.");
+        navigate("/refiller");
       }
     }
     loadMachine();
-  }, [machineId]);
+  }, [machineId, navigate]);
 
-  function addLog(msg) {
-    setLogs(prev => [...prev, msg]);
-  }
+  function addLog(msg) { setLogs(prev => [...prev, msg]); }
 
-  // 🛠️ CUSTOM DATE PARSER for "16/Feb/2026 0:56:08"
   function parseCustomDate(dateStr) {
     if (!dateStr) return null;
-    
-    // Try standard first
     let date = new Date(dateStr);
     if (!isNaN(date.getTime())) return date;
 
-    // Custom Parse: "16/Feb/2026 0:56:08"
     try {
       const parts = dateStr.split(' '); 
       if (parts.length < 2) return null;
-
       const dateParts = parts[0].split('/'); 
       const timeParts = parts[1].split(':'); 
-
       const day = parseInt(dateParts[0], 10);
-      const monthStr = dateParts[1];
+      const months = { "Jan":0, "Feb":1, "Mar":2, "Apr":3, "May":4, "Jun":5, "Jul":6, "Aug":7, "Sep":8, "Oct":9, "Nov":10, "Dec":11 };
+      const month = months[dateParts[1]];
       const year = parseInt(dateParts[2], 10);
-      
-      const months = {
-        "Jan":0, "Feb":1, "Mar":2, "Apr":3, "May":4, "Jun":5,
-        "Jul":6, "Aug":7, "Sep":8, "Oct":9, "Nov":10, "Dec":11
-      };
-      const month = months[monthStr];
-
       return new Date(year, month, day, timeParts[0], timeParts[1], timeParts[2]);
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   function parseCSV(file, setter) {
     Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
+      header: true, skipEmptyLines: true,
       complete: (results) => {
         setter(results.data);
         addLog(`✅ Loaded ${file.name}: ${results.data.length} rows.`);
@@ -87,52 +66,36 @@ export default function RefillerMakeKit() {
     if (masterData.length === 0) return alert("Please upload Master CSV.");
     if (salesData.length === 0) return alert("Please upload Sales CSV.");
 
-    // 1. Cutoff Time (Last Refill)
-    const lastRefill = machine.lastRefillCompletedAt?.toDate 
-      ? machine.lastRefillCompletedAt.toDate() 
-      : new Date(0); 
-
+    const lastRefill = machine.lastRefillCompletedAt?.toDate ? machine.lastRefillCompletedAt.toDate() : new Date(0); 
     addLog(`🕒 Last Refill: ${lastRefill.toLocaleString()}`);
 
-    // 2. Count Sales (Filtering by Date)
     const salesCounts = {}; 
-    let validSales = 0;
-    let oldSales = 0;
+    let validSales = 0, oldSales = 0;
 
     salesData.forEach((row) => {
       const slotVal = row["Selection"] || row["selection"] || row["Slot"] || row["slot"];
       if (!slotVal) return;
-
       const dateVal = row["Date"] || row["date"] || row["Time"];
       const saleDate = parseCustomDate(dateVal);
 
       if (saleDate && saleDate > lastRefill) {
         salesCounts[slotVal] = (salesCounts[slotVal] || 0) + 1;
         validSales++;
-      } else {
-        oldSales++;
-      }
+      } else { oldSales++; }
     });
 
-    addLog(`📊 Sales Analysis: ${validSales} new sales. (${oldSales} ignored).`);
+    addLog(`📊 Sales Analysis: ${validSales} new sales. (${oldSales} ignored before last refill).`);
 
-    // 3. Match with Master Data
     const output = [];
-    
     masterData.forEach((row) => {
       const slotId = row["slot"] || row["Slot"]; 
       if (!slotId) return;
-
       const soldCount = salesCounts[slotId] || 0;
-      
       if (soldCount > 0) {
-        const capacity = Number(row["capacity"] || row["count"] || 20); 
-        const name = row["name"] || "Unknown Product";
-
         output.push({
           productId: slotId, 
-          name: name,
-          capacity: capacity,
+          name: row["name"] || "Unknown Product",
+          capacity: Number(row["capacity"] || row["count"] || 20),
           soldSinceRefill: soldCount,
           requiredQty: soldCount, 
         });
@@ -152,7 +115,7 @@ export default function RefillerMakeKit() {
       
       await setDoc(kitRef, {
         machineId,
-        orgId: machine.orgId, // 🟢 SECURITY FIX
+        orgId: machine.orgId, 
         refillerId: user.uid,
         refillerEmail: user.email,
         products: calculated,
@@ -169,7 +132,7 @@ export default function RefillerMakeKit() {
         updatedAt: serverTimestamp(),
       });
 
-      alert("✅ Kit Created Successfully!");
+      alert("✅ Kit Created Successfully! Please proceed to the machine.");
       navigate(`/refiller/machines/${machineId}`);
     } catch (err) {
       console.error(err);
@@ -180,63 +143,57 @@ export default function RefillerMakeKit() {
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 800, margin: "0 auto" }}>
+    <div style={{ maxWidth: 800, margin: "0 auto" }}>
       <button onClick={() => navigate(-1)} style={btnBack}>← Back</button>
-      
-      <h1 style={{marginBottom: 20}}>⚡ Auto-Calculate Kit</h1>
+      <h2 style={{marginTop: 0, color: "#1e293b"}}>⚡ Auto-Calculate Kit</h2>
       
       <div style={card}>
-        <h3>1. Upload Data Files</h3>
+        <h3 style={{marginTop:0, marginBottom: 15, color: "#334155"}}>1. Upload Data Files</h3>
         
         <div style={uploadRow}>
           <label style={label}>
-            📄 <strong>Master Data</strong> (Planogram)
-            <br/><small style={{color:'#666'}}>Must have "slot" and "name"</small>
+            <div style={{fontSize: 16, marginBottom: 4}}>📄 <strong>Master Data</strong> (Planogram)</div>
+            <div style={{color:'#64748b', fontSize: 13, fontWeight: "normal"}}>Required columns: "slot", "name"</div>
           </label>
-          <input type="file" accept=".csv" onChange={(e) => parseCSV(e.target.files[0], setMasterData)} />
+          <input type="file" accept=".csv" onChange={(e) => parseCSV(e.target.files[0], setMasterData)} style={{maxWidth: "200px"}} />
         </div>
 
         <div style={uploadRow}>
           <label style={label}>
-            📉 <strong>Sales Report</strong> (Tracking)
-            <br/><small style={{color:'#666'}}>Must have "Selection" and "Date"</small>
+            <div style={{fontSize: 16, marginBottom: 4}}>📉 <strong>Sales Report</strong></div>
+            <div style={{color:'#64748b', fontSize: 13, fontWeight: "normal"}}>Required columns: "Selection", "Date"</div>
           </label>
-          <input type="file" accept=".csv" onChange={(e) => parseCSV(e.target.files[0], setSalesData)} />
+          <input type="file" accept=".csv" onChange={(e) => parseCSV(e.target.files[0], setSalesData)} style={{maxWidth: "200px"}} />
         </div>
 
-        <button onClick={calculateKit} style={btnPrimary}>
-          🚀 Run Calculation
-        </button>
+        <button onClick={calculateKit} style={btnPrimary}>🚀 Run Calculation</button>
 
-        {/* LOGS CONSOLE */}
         {logs.length > 0 && (
           <div style={logBox}>
-            {logs.map((l, i) => <div key={i}>{l}</div>)}
+            {logs.map((l, i) => <div key={i} style={{marginBottom: 4}}>{l}</div>)}
           </div>
         )}
       </div>
 
       {calculated.length > 0 && (
         <div style={{...card, marginTop: 20}}>
-          <h3>2. Review Kit Requirements</h3>
+          <h3 style={{marginTop:0, marginBottom: 15, color: "#334155"}}>2. Review Kit Requirements</h3>
           
           <div style={tableWrapper}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
-                <tr style={{background: "#f5f5f5", textAlign: "left"}}>
+                <tr style={{background: "#f1f5f9", textAlign: "left"}}>
                   <th style={th}>Slot</th>
                   <th style={th}>Product</th>
-                  <th style={th}>Sold (Refill Qty)</th>
+                  <th style={th}>Pack Qty</th>
                 </tr>
               </thead>
               <tbody>
                 {calculated.map((p) => (
-                  <tr key={p.productId} style={{borderBottom: "1px solid #eee"}}>
+                  <tr key={p.productId} style={{borderBottom: "1px solid #e2e8f0"}}>
                     <td style={td}><b>{p.productId}</b></td>
                     <td style={td}>{p.name}</td>
-                    <td style={{...td, color: "green", fontWeight: "bold", fontSize: 16}}>
-                      {p.requiredQty}
-                    </td>
+                    <td style={{...td, color: "#16a34a", fontWeight: "bold", fontSize: 16}}>+{p.requiredQty}</td>
                   </tr>
                 ))}
               </tbody>
@@ -244,7 +201,7 @@ export default function RefillerMakeKit() {
           </div>
 
           <button onClick={saveKit} disabled={loading} style={btnSuccess}>
-            {loading ? "Saving..." : "💾 Create & Mark Prepared"}
+            {loading ? "Saving..." : "💾 Create Kit & Mark Prepared"}
           </button>
         </div>
       )}
@@ -253,13 +210,13 @@ export default function RefillerMakeKit() {
 }
 
 // Styles
-const card = { background: "#fff", padding: 20, borderRadius: 12, boxShadow: "0 2px 10px rgba(0,0,0,0.05)" };
-const label = { display: "block", marginBottom: 5, color: "#333", flex:1 };
-const uploadRow = { display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 20, borderBottom:'1px dashed #eee', paddingBottom:15 };
-const btnBack = { border: "none", background: "none", color: "#1976d2", cursor: "pointer", marginBottom: 15, fontSize: 14 };
-const btnPrimary = { background: "#1976d2", color: "#fff", border: "none", padding: "12px 20px", borderRadius: 8, cursor: "pointer", fontWeight: "bold", fontSize: 15, width:'100%' };
-const btnSuccess = { background: "#2e7d32", color: "#fff", border: "none", padding: "12px 20px", borderRadius: 8, cursor: "pointer", fontWeight: "bold", fontSize: 15, width: "100%", marginTop: 20 };
-const tableWrapper = { maxHeight: "400px", overflowY: "auto", border: "1px solid #eee", borderRadius: 8, marginTop: 10 };
-const th = { padding: "10px", position: "sticky", top: 0, background: "#f5f5f5" };
-const td = { padding: "10px" };
-const logBox = { marginTop: 15, padding: 10, background: "#333", color: "#0f0", fontFamily: "monospace", fontSize: 12, borderRadius: 6, maxHeight: 150, overflowY: 'auto' };
+const card = { background: "#fff", padding: 20, borderRadius: 12, boxShadow: "0 2px 10px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0" };
+const label = { display: "block", color: "#333", flex:1 };
+const uploadRow = { display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 20, background: "#f8fafc", padding: 15, borderRadius: 8, border: "1px solid #e2e8f0" };
+const btnBack = { border: "none", background: "none", color: "#3b82f6", cursor: "pointer", marginBottom: 15, fontSize: 15, fontWeight: "bold", padding: 0 };
+const btnPrimary = { background: "#3b82f6", color: "#fff", border: "none", padding: "14px 20px", borderRadius: 8, cursor: "pointer", fontWeight: "bold", fontSize: 16, width:'100%', boxShadow: "0 4px 6px rgba(59, 130, 246, 0.2)" };
+const btnSuccess = { background: "#10b981", color: "#fff", border: "none", padding: "14px 20px", borderRadius: 8, cursor: "pointer", fontWeight: "bold", fontSize: 16, width: "100%", marginTop: 20, boxShadow: "0 4px 6px rgba(16, 185, 129, 0.2)" };
+const tableWrapper = { maxHeight: "300px", overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 8 };
+const th = { padding: "12px", position: "sticky", top: 0, background: "#f1f5f9", color: "#64748b" };
+const td = { padding: "12px" };
+const logBox = { marginTop: 20, padding: 15, background: "#1e293b", color: "#4ade80", fontFamily: "monospace", fontSize: 13, borderRadius: 8, maxHeight: 150, overflowY: 'auto' };

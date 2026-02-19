@@ -1,8 +1,7 @@
-import { initializeApp, getApp, getApps } from "firebase/app";
+import { initializeApp, getApp, getApps, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { getFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
 
-// Re-use your config from firebaseClient.js (you might need to export it or copy it here)
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -14,15 +13,14 @@ const firebaseConfig = {
 
 // 🛠️ Helper to create a user WITHOUT logging out the current admin
 export async function createSecondaryUser(email, password, roleData) {
+  const appName = "SecondaryAppInstance";
   let secondaryApp;
+  
   try {
-    // 1. Initialize a secondary app instance
-    const appName = "secondaryApp";
-    // Check if exists to avoid errors
+    // 1. Initialize or retrieve secondary app
     const existingApps = getApps();
-    const found = existingApps.find(app => app.name === appName);
-    
-    secondaryApp = found ? found : initializeApp(firebaseConfig, appName);
+    secondaryApp = existingApps.find(app => app.name === appName) 
+      || initializeApp(firebaseConfig, appName);
     
     const secondaryAuth = getAuth(secondaryApp);
     const db = getFirestore(getApp()); // Use MAIN app firestore (authenticated as admin)
@@ -31,24 +29,28 @@ export async function createSecondaryUser(email, password, roleData) {
     const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
     const newUser = userCredential.user;
 
-    // 3. Create the user doc in Firestore (Using MAIN db connection so it has Admin permissions)
-    // We strictly define the fields based on the roleData passed
+    // 3. Create the user doc in Firestore using Admin connection
     await setDoc(doc(db, "users", newUser.uid), {
       uid: newUser.uid,
       email: email,
-      ...roleData, // { role: 'admin', orgId: '...', etc }
+      ...roleData, 
       status: "active",
       deleted: false,
       createdAt: serverTimestamp(),
     });
 
-    // 4. Sign out the secondary auth immediately so it doesn't linger
+    // 4. Sign out and delete the secondary app so it doesn't leak memory or session states
     await signOut(secondaryAuth);
+    await deleteApp(secondaryApp);
 
     return newUser;
 
   } catch (error) {
     console.error("Error creating secondary user:", error);
+    // Cleanup on failure
+    if (secondaryApp) {
+        await deleteApp(secondaryApp).catch(e => console.log("Cleanup error ignored", e));
+    }
     throw error;
   }
 }

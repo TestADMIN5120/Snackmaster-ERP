@@ -14,20 +14,18 @@ import {
 
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebaseClient";
-import { useAdmin } from "../../contexts/AdminContext"; // 🟢 Import Context
+import { useAdmin } from "../../contexts/AdminContext";
 
 import FilterBar from "../../components/AdminMachines/FilterBar";
 import Pagination from "../../components/AdminMachines/Pagination";
-import AddMachineModal from "../../components/AddMachineModal";
 import EditMachineModal from "../../components/EditMachineModal";
 
 export default function AdminMachines() {
   const nav = useNavigate();
-  const { user, orgId } = useAdmin(); // 🟢 Get Org ID from Context
+  const { user, orgId } = useAdmin(); 
 
   const [machines, setMachines] = useState([]);
   const [refillers, setRefillers] = useState([]);
-  const [showAdd, setShowAdd] = useState(false);
   const [editMachine, setEditMachine] = useState(null);
 
   const [search, setSearch] = useState("");
@@ -65,7 +63,6 @@ export default function AdminMachines() {
     async function loadRefillers() {
       if (!orgId) return;
       try {
-        // 🟢 SECURE QUERY: Only refillers in my Org
         const q = query(
           collection(db, "users"),
           where("role", "==", "refiller"),
@@ -112,9 +109,9 @@ export default function AdminMachines() {
       });
 
       await addDoc(collection(db, "admin_actions"), {
-        actorEmail: user.email, // 🟢 Use Context User
+        actorEmail: user.email, 
         actorUid: user.uid,
-        orgId: orgId, // 🟢 Tag with Org
+        orgId: orgId, 
         actionType: "change_status",
         machineId,
         newStatus,
@@ -125,43 +122,7 @@ export default function AdminMachines() {
     }
   }
 
-  /** DELETE MACHINE (Soft Delete) */
-  async function deleteMachine(machineId) {
-    if (!confirm(`Delete machine ${machineId}?`)) return;
-    try {
-      // 🟢 SOFT DELETE to respect security rules & keep audit trail
-      await updateDoc(doc(db, "machines", machineId), {
-        deleted: true,
-        deletedAt: serverTimestamp(),
-        deletedBy: user.email
-      });
-      alert("Machine deleted.");
-    } catch (err) {
-      console.error(err);
-      alert("Delete failed.");
-    }
-  }
-
-  /** UNASSIGN MACHINE */
-  async function unassignMachine(machineId) {
-    if (!confirm(`Unassign machine ${machineId}?`)) return;
-    await updateDoc(doc(db, "machines", machineId), {
-      assignedTo: null,
-      assignedEmail: null,
-      assignedAt: serverTimestamp(),
-    });
-  }
-
-  /** REASSIGN */
-  async function reassignMachine(machineId, refillerUid) {
-    if (!refillerUid) return alert("Choose a refiller.");
-    const ref = refillers.find((r) => r.uid === refillerUid);
-    await updateDoc(doc(db, "machines", machineId), {
-      assignedTo: refillerUid,
-      assignedEmail: ref?.email,
-      assignedAt: serverTimestamp(),
-    });
-  }
+  // ❌ Removed deleteMachine function. Admins cannot delete machines anymore.
 
   if (loading) return <div style={{ padding: 24 }}>Loading machines...</div>;
 
@@ -173,12 +134,9 @@ export default function AdminMachines() {
 
         <div style={{ display: "flex", gap: 10 }}>
           <button style={btnPurple} onClick={() => nav("/admin/machines/assign")}>
-            Assign Machines
+            Assign Machines to Team
           </button>
-
-          <button style={btnGreen} onClick={() => setShowAdd(true)}>
-            + Add Machine
-          </button>
+          {/* ❌ Removed + Add Machine button */}
         </div>
       </div>
 
@@ -242,7 +200,7 @@ export default function AdminMachines() {
               <td style={td}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <button style={btnSecondary} onClick={() => setEditMachine(m)}>
-                    Edit
+                    Edit Details
                   </button>
 
                   <button
@@ -251,10 +209,7 @@ export default function AdminMachines() {
                   >
                     Configure Slots
                   </button>
-
-                  <button style={btnDanger} onClick={() => deleteMachine(m.id)}>
-                    Delete
-                  </button>
+                  {/* ❌ Removed Delete Button */}
                 </div>
               </td>
             </tr>
@@ -264,7 +219,7 @@ export default function AdminMachines() {
 
       {machines.length === 0 && (
         <div style={{padding:40, textAlign:'center', color:'#666'}}>
-            No machines found for your organization.
+            No machines found for your organization. Contact SuperAdmin to register a machine.
         </div>
       )}
 
@@ -276,8 +231,6 @@ export default function AdminMachines() {
         setPageSize={setPageSize}
       />
 
-      {/* MODALS: Pass OrgId down just in case */}
-      {showAdd && <AddMachineModal onClose={() => setShowAdd(false)} orgId={orgId} />}
       {editMachine && <EditMachineModal machine={editMachine} onClose={() => setEditMachine(null)} />}
     </div>
   );
@@ -288,6 +241,4 @@ const th = { textAlign: "left", padding: "10px", fontWeight: 700, fontSize: 14 }
 const td = { padding: "10px", fontSize: 14 };
 
 const btnSecondary = { padding: "6px 10px", background: "#3498db", borderRadius: 6, color: "#fff", border:'none', cursor:'pointer' };
-const btnDanger = { padding: "6px 10px", background: "#e74c3c", borderRadius: 6, color: "#fff", border:'none', cursor:'pointer' };
-const btnGreen = { padding: "8px 14px", background: "#28a745", borderRadius: 6, color: "#fff", border:'none', cursor:'pointer' };
 const btnPurple = { padding: "6px 10px", background: "#6f42c1", borderRadius: 6, color: "#fff", border:'none', cursor:'pointer' };

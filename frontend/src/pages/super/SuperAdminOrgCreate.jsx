@@ -21,9 +21,11 @@ function Field({ label, error, ...props }) {
         {...props}
         style={{
           width: "100%",
-          padding: "10px",
+          padding: "12px",
           borderRadius: 6,
+          boxSizing: "border-box",
           border: error ? "1px solid #e53935" : "1px solid #ccc",
+          fontSize: 15
         }}
       />
       {error && <div style={{ color: "#e53935", fontSize: 13, marginTop: 4 }}>{error}</div>}
@@ -41,7 +43,6 @@ export default function SuperAdminOrgCreate() {
 
   function updateField(e) {
     const { name, value } = e.target;
-    // Force ORG ID uppercase
     if (name === "id") {
       setForm({ ...form, id: value.toUpperCase().trim() });
     } else {
@@ -52,7 +53,7 @@ export default function SuperAdminOrgCreate() {
   function validate() {
     const e = {};
     if (!form.id.match(/^ORG_[A-Z0-9_]+$/)) {
-      e.id = "Org ID must start with ORG_ and contain only capitals";
+      e.id = "Org ID must start with ORG_ and contain only capitals/numbers";
     }
     if (!form.name.trim()) e.name = "Organisation name is required";
     setErrors(e);
@@ -76,6 +77,7 @@ export default function SuperAdminOrgCreate() {
         name: form.name.trim(),
         status: "active",
         suspended: false,
+        deleted: false, // 🟢 FIX: CRITICAL FOR QUERIES
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -103,9 +105,9 @@ export default function SuperAdminOrgCreate() {
   return (
     <div style={{ maxWidth: 520, padding: 24 }}>
       <h1 style={{ marginBottom: 20 }}>Create Organisation</h1>
-      {errors.global && <div style={{ color: "#e53935", marginBottom: 16 }}>{errors.global}</div>}
+      {errors.global && <div style={{ color: "#e53935", marginBottom: 16, background: "#fee2e2", padding: 10, borderRadius: 6 }}>{errors.global}</div>}
 
-      <form onSubmit={createOrganisation}>
+      <form onSubmit={createOrganisation} style={{ background: "#fff", padding: 24, borderRadius: 12, boxShadow: "0 2px 10px rgba(0,0,0,0.05)"}}>
         <Field
           label="Organisation ID"
           name="id"
@@ -120,39 +122,16 @@ export default function SuperAdminOrgCreate() {
           name="name"
           value={form.name}
           onChange={updateField}
-          placeholder="Hyderabad Franchise"
+          placeholder="e.g. Hyderabad Franchise"
           error={errors.name}
         />
 
-        <div style={{ marginTop: 24 }}>
-          <button
-            type="submit"
-            disabled={saving}
-            style={{
-              padding: "10px 16px",
-              background: "#1e88e5",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              fontWeight: 600,
-              cursor: saving ? "not-allowed" : "pointer",
-            }}
-          >
+        <div style={{ marginTop: 30, display: "flex", gap: 12 }}>
+          <button type="submit" disabled={saving} style={saving ? btnDisabled : btnPrimary}>
             {saving ? "Creating…" : "Create Organisation"}
           </button>
 
-          <button
-            type="button"
-            onClick={() => navigate("/super/orgs")}
-            style={{
-              marginLeft: 12,
-              padding: "10px 16px",
-              background: "#e0e0e0",
-              border: "none",
-              borderRadius: 6,
-              cursor: "pointer",
-            }}
-          >
+          <button type="button" disabled={saving} onClick={() => navigate("/super/orgs")} style={btnSecondary}>
             Cancel
           </button>
         </div>
@@ -160,3 +139,7 @@ export default function SuperAdminOrgCreate() {
     </div>
   );
 }
+
+const btnPrimary = { flex: 1, padding: "12px", background: "#1e88e5", color: "#fff", border: "none", borderRadius: 6, fontWeight: "bold", fontSize: 15, cursor: "pointer" };
+const btnDisabled = { flex: 1, padding: "12px", background: "#90caf9", color: "#fff", border: "none", borderRadius: 6, fontWeight: "bold", fontSize: 15, cursor: "not-allowed" };
+const btnSecondary = { padding: "12px 24px", background: "#e0e0e0", color: "#333", border: "none", borderRadius: 6, fontWeight: "bold", fontSize: 15, cursor: "pointer" };

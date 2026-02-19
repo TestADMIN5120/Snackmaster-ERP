@@ -9,13 +9,11 @@ import {
 } from "firebase/firestore";
 import { db } from "../../firebaseClient";
 
-function SuperAdminAuditLogs() {
-  console.log("🔥 SuperAdminAuditLogs MOUNTED");
-
+export default function SuperAdminAuditLogs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Filters
+  // Filters
   const [selectedDate, setSelectedDate] = useState("");
   const [actionFilter, setActionFilter] = useState("");
 
@@ -30,7 +28,7 @@ function SuperAdminAuditLogs() {
       let q = collection(db, "admin_actions");
       const constraints = [];
 
-      // 🔹 Day-wise filter
+      // Day-wise filter
       if (filters.date) {
         const date = new Date(filters.date);
         const start = new Date(date.setHours(0, 0, 0, 0));
@@ -42,26 +40,16 @@ function SuperAdminAuditLogs() {
         );
       }
 
-      // 🔹 Action filter (prefix based)
+      // Action filter
       if (filters.action) {
         constraints.push(where("action", ">=", filters.action));
         constraints.push(where("action", "<=", filters.action + "\uf8ff"));
       }
 
-      const finalQuery = query(
-        q,
-        ...constraints,
-        orderBy("createdAt", "desc")
-      );
-
+      const finalQuery = query(q, ...constraints, orderBy("createdAt", "desc"));
       const snap = await getDocs(finalQuery);
 
-      setLogs(
-        snap.docs.map(d => ({
-          id: d.id,
-          ...d.data(),
-        }))
-      );
+      setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err) {
       console.error("❌ Failed to load audit logs", err);
     } finally {
@@ -70,10 +58,7 @@ function SuperAdminAuditLogs() {
   }
 
   function applyFilters() {
-    loadLogs({
-      date: selectedDate,
-      action: actionFilter,
-    });
+    loadLogs({ date: selectedDate, action: actionFilter });
   }
 
   function resetFilters() {
@@ -82,98 +67,76 @@ function SuperAdminAuditLogs() {
     loadLogs();
   }
 
-  if (loading) {
-    return <div style={{ padding: 24 }}>Loading audit logs…</div>;
-  }
+  if (loading) return <div style={{ padding: 24 }}>Loading audit logs…</div>;
 
   return (
     <div style={{ padding: 24 }}>
-      <h1 style={{ marginBottom: 16 }}>Audit Logs</h1>
+      <h1 style={{ marginBottom: 20 }}>System Audit Logs</h1>
 
-      {/* 🔹 FILTER BAR */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+      {/* FILTER BAR */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center", background: "#fff", padding: 15, borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
         <input
           type="date"
           value={selectedDate}
           onChange={e => setSelectedDate(e.target.value)}
+          style={inputStyle}
         />
 
         <select
           value={actionFilter}
           onChange={e => setActionFilter(e.target.value)}
+          style={inputStyle}
         >
-          <option value="">All Actions</option>
-          <option value="ADMIN">Admin</option>
-          <option value="MACHINE">Machine</option>
-          <option value="ORG">Organisation</option>
+          <option value="">All Categories</option>
+          <option value="ADMIN">Admin Actions</option>
+          <option value="MACHINE">Machine Actions</option>
+          <option value="ORG">Organisation Actions</option>
         </select>
 
-        <button onClick={applyFilters} style={primaryBtn}>
-          Apply
-        </button>
-
-        <button onClick={resetFilters} style={secondaryBtn}>
-          Reset
-        </button>
+        <button onClick={applyFilters} style={primaryBtn}>Search</button>
+        <button onClick={resetFilters} style={secondaryBtn}>Clear</button>
       </div>
 
-      {/* 🔹 TABLE */}
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left" }}>
-            <th>Action</th>
-            <th>Org</th>
-            <th>Machine</th>
-            <th>Performed By</th>
-            <th>Timestamp</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {logs.map(log => (
-            <tr key={log.id} style={{ borderBottom: "1px solid #eee" }}>
-              <td><b>{log.action}</b></td>
-              <td style={{ fontFamily: "monospace" }}>{log.orgId || "—"}</td>
-              <td style={{ fontFamily: "monospace" }}>{log.machineId || "—"}</td>
-              <td>{log.performedBy || "—"}</td>
-              <td>
-                {log.createdAt?.toDate
-                  ? log.createdAt.toDate().toLocaleString()
-                  : "—"}
-              </td>
-            </tr>
-          ))}
-
-          {logs.length === 0 && (
+      {/* TABLE */}
+      <div style={tableContainer}>
+        <table style={table}>
+          <thead>
             <tr>
-              <td colSpan={5} style={{ padding: 20, color: "#777" }}>
-                No audit logs found.
-              </td>
+              <th style={th}>Action Event</th>
+              <th style={th}>Target ID (Org/Machine)</th>
+              <th style={th}>Performed By</th>
+              <th style={th}>Timestamp</th>
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {logs.map(log => (
+              <tr key={log.id} style={tr}>
+                <td style={{...td, color: "#1976d2", fontWeight: "bold"}}>{log.action}</td>
+                <td style={{...td, fontFamily: "monospace", color: "#555"}}>
+                    {log.orgId || log.machineId || log.toOrg || "—"}
+                </td>
+                <td style={td}>{log.performedBy || log.actorEmail || "System"}</td>
+                <td style={td}>
+                  {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {logs.length === 0 && (
+          <div style={emptyBox}>No audit logs found for this filter.</div>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ───────── STYLES ───────── */
-
-const primaryBtn = {
-  padding: "6px 12px",
-  background: "#1e88e5",
-  color: "#fff",
-  border: "none",
-  borderRadius: 6,
-  cursor: "pointer",
-};
-
-const secondaryBtn = {
-  padding: "6px 12px",
-  background: "#eee",
-  border: "1px solid #ccc",
-  borderRadius: 6,
-  cursor: "pointer",
-};
-
-export default SuperAdminAuditLogs;
+const tableContainer = { background: "#fff", borderRadius: 12, boxShadow: "0 2px 10px rgba(0,0,0,0.05)", overflow: "hidden" };
+const table = { width: "100%", borderCollapse: "collapse" };
+const th = { textAlign: "left", padding: "16px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#64748b", fontSize: 13, textTransform: "uppercase" };
+const td = { padding: "16px", verticalAlign: "middle" };
+const tr = { borderBottom: "1px solid #f1f5f9" };
+const inputStyle = { padding: "10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14 };
+const primaryBtn = { padding: "10px 20px", background: "#1e88e5", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" };
+const secondaryBtn = { padding: "10px 20px", background: "#e2e8f0", color: "#475569", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" };
+const emptyBox = { padding: "60px", textAlign: "center", color: "#94a3b8", fontSize: 16 };

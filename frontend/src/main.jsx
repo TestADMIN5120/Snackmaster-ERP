@@ -13,9 +13,6 @@ import { AdminProvider, useAdmin } from "./contexts/AdminContext";
 /* ───────── AUTH PAGES ───────── */
 import Login from "./pages/Login";
 
-/* ───────── COMMON PAGES ───────── */
-import Dashboard from "./pages/Dashboard";
-
 /* ───────── ADMIN ───────── */
 import AdminLayout from "./layouts/AdminLayout";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -54,7 +51,6 @@ import SuperAdminIssues from "./pages/super/SuperAdminIssues";
 import RequireAdmin from "./components/RequireAdmin";
 import RequireSuperAdmin from "./components/RequireSuperAdmin";
 
-/* ───────── STYLES ───────── */
 import "./styles.css";
 
 /* ─────────────────────────────
@@ -64,29 +60,20 @@ function AppRoutes() {
   const { user, role, loading } = useAdmin();
   const location = useLocation();
 
-  // 🛑 1. STOP INFINITE LOOPS: Wait for Firebase
-  if (loading) {
-    return (
-      <div style={{ height: "100vh", display: "flex", justifyContent: "center", alignItems: "center", background: "#f4f7f6" }}>
-        <h3 style={{color: "#555"}}>Loading SnackMaster...</h3>
-      </div>
-    );
-  }
+  if (loading) return null; // Context handles the loading UI
 
-  // 🛑 2. LOGIN GUARD: If logged in, redirect away from Login
+  // LOGIN GUARD
   if (user && location.pathname === "/login") {
     if (role === "super_admin") return <Navigate to="/super" replace />;
     if (role === "admin") return <Navigate to="/admin" replace />;
     if (role === "refiller") return <Navigate to="/refiller" replace />;
-    return <Navigate to="/" replace />;
   }
 
   return (
     <Routes>
-      {/* ───────── LOGIN ───────── */}
       <Route path="/login" element={<Login />} />
 
-      {/* ───────── ROOT REDIRECT ───────── */}
+      {/* ROOT REDIRECT (Smart Routing) */}
       <Route
         path="/"
         element={
@@ -99,18 +86,13 @@ function AppRoutes() {
           ) : role === "refiller" ? (
             <Navigate to="/refiller" replace />
           ) : (
-            <Dashboard />
+            <Navigate to="/login" replace /> // Fallback for invalid roles
           )
         }
       />
 
       {/* ───────── REFILLER ───────── */}
-      <Route 
-        path="/refiller" 
-        element={
-          user ? <RefillerLayout /> : <Navigate to="/login" />
-        }
-      >
+      <Route path="/refiller" element={user && role === "refiller" ? <RefillerLayout /> : <Navigate to="/login" />}>
         <Route index element={<RefillerDashboard />} />
         <Route path="machines" element={<RefillerDashboard />} />
         <Route path="machines/:machineId" element={<RefillerMachinePage />} />
@@ -121,14 +103,7 @@ function AppRoutes() {
       </Route>
 
       {/* ───────── SUPER ADMIN ───────── */}
-      <Route
-        path="/super"
-        element={
-          <RequireSuperAdmin>
-            <SuperAdminLayout />
-          </RequireSuperAdmin>
-        }
-      >
+      <Route path="/super" element={<RequireSuperAdmin><SuperAdminLayout /></RequireSuperAdmin>}>
         <Route index element={<SuperAdminDashboard />} />
         <Route path="insights" element={<SuperAdminInsights />} />
         <Route path="orgs" element={<SuperAdminOrganisations />} />
@@ -142,14 +117,7 @@ function AppRoutes() {
       </Route>
 
       {/* ───────── ADMIN ───────── */}
-      <Route
-        path="/admin"
-        element={
-          <RequireAdmin>
-            <AdminLayout />
-          </RequireAdmin>
-        }
-      >
+      <Route path="/admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
         <Route index element={<AdminDashboard />} />
         <Route path="issues" element={<AdminMachineIssues />} /> 
         <Route path="machines" element={<AdminMachines />} />
@@ -162,7 +130,7 @@ function AppRoutes() {
       </Route>
       
       {/* ───────── FALLBACK ───────── */}
-      <Route path="*" element={<Navigate to="/" />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+ import React, { useEffect, useState, useMemo } from "react";
 import {
   collection,
   getDocs,
@@ -22,7 +22,7 @@ export default function SuperAdminAdmins() {
   const [orgs, setOrgs] = useState([]);
   const [search, setSearch] = useState("");
   const [filterOrg, setFilterOrg] = useState("");
-  const [viewDeleted, setViewDeleted] = useState(false); // 🔄 New: Toggle between Active/Deleted
+  const [viewDeleted, setViewDeleted] = useState(false); 
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
 
@@ -56,7 +56,6 @@ export default function SuperAdminAdmins() {
     });
   }
 
-  // 🛠️ RESTORE FUNCTION
   async function restoreAdmin(admin) {
     if (!window.confirm(`Restore access for ${admin.email}?`)) return;
     setBusyId(admin.id);
@@ -93,7 +92,6 @@ export default function SuperAdminAdmins() {
     }
   }
 
-  /* ... Keep existing toggleAdmin, reassignAdmin, resendReset functions ... */
   async function toggleAdmin(admin, enable) {
     setBusyId(admin.id);
     try {
@@ -120,13 +118,12 @@ export default function SuperAdminAdmins() {
     try { await sendPasswordResetEmail(auth, email); alert("Reset email sent"); } catch(e) { alert("Failed"); }
   }
 
-  // 🔍 Updated Filter Logic
   const visibleAdmins = useMemo(() => {
     return admins.filter((a) => {
       const isDeletedMatch = viewDeleted ? a.deleted === true : (a.deleted === false || !a.deleted);
       const orgName = orgs.find(o => o.id === a.orgId)?.name || "";
-      const matchesSearch = a.email.toLowerCase().includes(search.toLowerCase()) || 
-                           orgName.toLowerCase().includes(search.toLowerCase());
+      const matchesSearch = (a.email || "").toLowerCase().includes(search.toLowerCase()) || 
+                            orgName.toLowerCase().includes(search.toLowerCase());
       const matchesOrgFilter = !filterOrg || a.orgId === filterOrg;
       
       return isDeletedMatch && matchesSearch && matchesOrgFilter;
@@ -144,7 +141,6 @@ export default function SuperAdminAdmins() {
         </button>
       </div>
 
-      {/* FILTERS BAR */}
       <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: 'center' }}>
         <input
           placeholder="Search by email or org..."
@@ -153,38 +149,39 @@ export default function SuperAdminAdmins() {
           style={searchInput}
         />
 
-        <select value={filterOrg} onChange={(e) => setFilterOrg(e.target.value)} style={selectStyle}>
+        <select value={filterOrg} onChange={(e) => setFilterOrg(e.target.value)} style={selectFilter}>
           <option value="">All Organisations</option>
-          {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          {orgs.filter(o => !o.deleted).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
 
-        {/* 🔄 VIEW TOGGLE */}
         <button 
           onClick={() => setViewDeleted(!viewDeleted)} 
-          style={viewDeleted ? btnActiveTab : btnGhost}
+          style={viewDeleted ? btnActiveTab : btnGhostTab}
         >
           {viewDeleted ? "📂 Show Active" : "🗑️ Show Deleted"}
         </button>
       </div>
 
-      {/* TABLE */}
       <div style={tableContainer}>
         <table style={table}>
           <thead>
             <tr>
-              <th style={{ ...th, width: "30%" }}>Admin Email</th>
+              <th style={{ ...th, width: "25%" }}>Admin Details</th>
               <th style={{ ...th, width: "25%" }}>Organisation</th>
               <th style={{ ...th, width: "10%" }}>Status</th>
-              <th style={{ ...th, width: "35%" }}>Actions</th>
+              <th style={{ ...th, width: "40%" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {visibleAdmins.map((a) => (
               <tr key={a.id} style={tr}>
-                <td style={td}>{a.email}</td>
                 <td style={td}>
-                    <div style={{ fontWeight: 600 }}>{orgs.find(o => o.id === a.orgId)?.name || "N/A"}</div>
-                    <div style={{ fontSize: 11, color: "#999" }}>{a.orgId}</div>
+                  <div style={{ fontWeight: "bold" }}>{a.displayName || "No Name"}</div>
+                  <div style={{ fontSize: 13, color: "#666" }}>{a.email}</div>
+                </td>
+                <td style={td}>
+                    <div style={{ fontWeight: 600 }}>{orgs.find(o => o.id === a.orgId)?.name || "Unassigned/Deleted"}</div>
+                    <div style={{ fontSize: 11, color: "#999", fontFamily: "monospace" }}>{a.orgId}</div>
                 </td>
                 <td style={td}>
                   <span style={statusBadge(a.deleted ? "deleted" : a.status)}>
@@ -194,35 +191,37 @@ export default function SuperAdminAdmins() {
                 <td style={td}>
                   <div style={actionsWrapper}>
                     {viewDeleted ? (
-                      // 🟢 ACTIONS FOR DELETED USERS
                       <button 
                         disabled={busyId === a.id} 
                         onClick={() => restoreAdmin(a)} 
-                        style={btnPrimary}
+                        style={btnRestore}
                       >
                         🔄 Restore Admin
                       </button>
                     ) : (
-                      // 🔴 ACTIONS FOR ACTIVE USERS
                       <>
-                        <button onClick={() => resendReset(a.email)} style={btnWarn}>Reset</button>
+                        {/* 🟢 STRICT FIXED-WIDTH ACTION BUTTONS */}
+                        <button onClick={() => resendReset(a.email)} style={btnActionReset}>Reset</button>
+                        
                         <select
                           disabled={busyId === a.id}
                           onChange={(e) => reassignAdmin(a, e.target.value)}
-                          defaultValue=""
-                          style={selectInputSmall}
+                          value={a.orgId || ""}
+                          style={selectActionOrg}
                         >
                           <option value="">Move Org</option>
-                          {orgs.filter((o) => o.id !== a.orgId).map((o) => (
+                          {orgs.filter((o) => !o.deleted).map((o) => (
                             <option key={o.id} value={o.id}>{o.name}</option>
                           ))}
                         </select>
+                        
                         {a.status === "disabled" ? (
-                          <button onClick={() => toggleAdmin(a, true)} style={btnPrimary}>Enable</button>
+                          <button onClick={() => toggleAdmin(a, true)} style={btnActionEnable}>Enable</button>
                         ) : (
-                          <button onClick={() => toggleAdmin(a, false)} style={btnDanger}>Disable</button>
+                          <button onClick={() => toggleAdmin(a, false)} style={btnActionDisable}>Disable</button>
                         )}
-                        <button onClick={() => softDelete(a)} style={btnGhost}>Delete</button>
+                        
+                        <button onClick={() => softDelete(a)} style={btnActionDelete}>Delete</button>
                       </>
                     )}
                   </div>
@@ -241,42 +240,33 @@ export default function SuperAdminAdmins() {
   );
 }
 
-/* ... STYLES (Add these new buttons to your existing styles) ... */
-const btnActiveTab = {
-  height: "34px",
-  padding: "0 12px",
-  background: "#f1f5f9",
-  color: "#475569",
-  border: "1px solid #cbd5e1",
-  borderRadius: 8,
-  cursor: "pointer",
-  fontWeight: 600
-};
-
-// Re-use your existing styles from the previous code block for th, td, tr, etc.
+/* STYLES */
 const header = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 };
 const tableContainer = { background: "#fff", borderRadius: 12, boxShadow: "0 2px 10px rgba(0,0,0,0.05)", overflow: "hidden" };
-const table = { width: "100%", borderCollapse: "collapse" };
+const table = { width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }; // 🟢 Ensures columns don't shift randomly
 const th = { textAlign: "left", padding: "16px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#64748b", fontSize: 13, textTransform: "uppercase" };
 const td = { padding: "16px", verticalAlign: "middle" };
 const tr = { borderBottom: "1px solid #f1f5f9" };
+const searchInput = { padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", width: "300px", fontSize: 14 };
+const selectFilter = { padding: "10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontSize: 14 };
+const emptyBox = { padding: "60px", textAlign: "center", color: "#94a3b8", fontSize: 16 };
+
+/* 🟢 STRICT FIXED ACTION STYLES */
 const actionsWrapper = { display: "flex", alignItems: "center", gap: "8px" };
-const searchInput = { padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", width: "300px" };
-const selectStyle = { padding: "10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff" };
-const createBtn = { padding: "10px 20px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" };
-const btnPrimary = { height: "34px", padding: "0 12px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" };
-const btnDanger = { height: "34px", padding: "0 12px", background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" };
-const btnWarn = { height: "34px", padding: "0 12px", background: "#f59e0b", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" };
-const btnGhost = { height: "34px", padding: "0 12px", background: "transparent", color: "#64748b", border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer" };
-const selectInputSmall = { height: "34px", padding: "0 8px", borderRadius: 6, border: "1px solid #e2e8f0" };
-const emptyBox = { padding: "60px", textAlign: "center", color: "#94a3b8" };
+
+const btnActionReset = { height: "34px", width: "70px", padding: 0, background: "#fb8c00", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold", textAlign: "center" };
+const selectActionOrg = { height: "34px", width: "140px", padding: "0 8px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" };
+const btnActionEnable = { height: "34px", width: "80px", padding: 0, background: "#1e88e5", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold", textAlign: "center" };
+const btnActionDisable = { height: "34px", width: "80px", padding: 0, background: "#e53935", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold", textAlign: "center" };
+const btnActionDelete = { height: "34px", width: "75px", padding: 0, background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 6, cursor: "pointer", fontWeight: "bold", textAlign: "center" };
+
+const btnRestore = { height: "34px", padding: "0 16px", background: "#1e88e5", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const createBtn = { padding: "10px 20px", background: "#1e88e5", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 14 };
+const btnActiveTab = { height: "38px", padding: "0 15px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: 8, cursor: "pointer", fontWeight: 600 };
+const btnGhostTab = { height: "38px", padding: "0 15px", background: "transparent", color: "#64748b", border: "1px solid #e2e8f0", borderRadius: 8, cursor: "pointer", fontWeight: 600 };
 
 const statusBadge = (status) => ({
-    padding: "4px 8px",
-    borderRadius: "6px",
-    fontSize: "11px",
-    fontWeight: "bold",
-    textTransform: "uppercase",
-    background: status === "deleted" ? "#fef2f2" : (status === "disabled" ? "#fee2e2" : "#dcfce7"),
-    color: status === "deleted" ? "#991b1b" : (status === "disabled" ? "#991b1b" : "#166534")
+    padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", textTransform: "uppercase",
+    background: status === "deleted" ? "#ffebee" : (status === "disabled" ? "#fff3e0" : "#e8f5e9"),
+    color: status === "deleted" ? "#c62828" : (status === "disabled" ? "#ef6c00" : "#2e7d32")
 });

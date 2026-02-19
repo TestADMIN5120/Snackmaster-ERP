@@ -7,54 +7,55 @@ export default function SuperAdminDashboard() {
   const { loading, stats } = useSuperAdminKPIs();
 
   return (
-    <div>
-      <h1 style={{ marginBottom: 12 }}>Super Admin Dashboard</h1>
-
-      <p style={{ color: "#555", marginBottom: 24 }}>
-        Logged in as <b>{user?.email}</b>
+    <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
+      <h1 style={{ marginBottom: 5, color: "#1e293b" }}>Command Center</h1>
+      <p style={{ color: "#64748b", marginBottom: 30, fontSize: 15 }}>
+        Super Admin access active for <b>{user?.email}</b>
       </p>
 
       {/* KPI CARDS */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
-          gap: 16,
-        }}
-      >
-        <Card
-          title="Total Organisations"
-          value={loading ? "—" : stats.organisations}
+      <div style={grid}>
+        <Card 
+          title="Organisations" 
+          value={loading ? "..." : stats.organisations} 
+          icon="🏢" 
+          color="#3b82f6" 
         />
-        <Card
-          title="Total Machines"
-          value={loading ? "—" : stats.machines}
+        <Card 
+          title="Machines (Total)" 
+          value={loading ? "..." : stats.machines} 
+          icon="🤖" 
+          color="#8b5cf6" 
         />
-        <Card
-          title="Total Admins"
-          value={loading ? "—" : stats.admins}
+        <Card 
+          title="Admins Active" 
+          value={loading ? "..." : stats.admins} 
+          icon="👔" 
+          color="#10b981" 
         />
-        <Card
-          title="Total Refills"
-          value={loading ? "—" : stats.refills}
+        <Card 
+          title="Refills Logged" 
+          value={loading ? "..." : stats.refills} 
+          icon="📦" 
+          color="#f59e0b" 
         />
       </div>
     </div>
   );
 }
 
-function Card({ title, value }) {
+function Card({ title, value, icon, color }) {
   return (
-    <div
-      style={{
-        background: "#fff",
-        borderRadius: 12,
-        padding: 20,
-        boxShadow: "0 4px 14px rgba(0,0,0,.08)",
-      }}
-    >
-      <h3 style={{ marginBottom: 6 }}>{title}</h3>
-      <div style={{ fontSize: 32, fontWeight: 800 }}>{value}</div>
+    <div style={{ background: "#fff", borderRadius: 16, padding: 24, boxShadow: "0 4px 20px rgba(0,0,0,.04)", border: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 20 }}>
+      <div style={{ fontSize: 40, background: `${color}15`, width: 70, height: 70, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 16 }}>
+        {icon}
+      </div>
+      <div>
+        <h3 style={{ margin: "0 0 5px 0", color: "#64748b", fontSize: 14, textTransform: "uppercase", letterSpacing: 0.5 }}>{title}</h3>
+        <div style={{ fontSize: 36, fontWeight: 800, color: "#0f172a", lineHeight: 1 }}>{value}</div>
+      </div>
     </div>
   );
 }
+
+const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 20 };

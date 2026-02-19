@@ -1,10 +1,13 @@
 import React from "react";
-import { Link, Outlet, useNavigate } from "react-router-dom";
+import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseClient";
+import { useAdmin } from "../contexts/AdminContext"; 
 
 export default function SuperAdminLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAdmin();
 
   async function handleLogout() {
     try {
@@ -14,29 +17,55 @@ export default function SuperAdminLayout() {
     }
   }
 
+  // Helper to highlight active route
+  const isActive = (path) => {
+    if (path === "/super" && location.pathname === "/super") return true;
+    if (path !== "/super" && location.pathname.startsWith(path)) return true;
+    return false;
+  };
+
+  const NavLink = ({ to, label, icon }) => (
+    <Link 
+      to={to} 
+      style={{
+        ...linkStyle, 
+        background: isActive(to) ? "rgba(79, 195, 247, 0.2)" : "transparent",
+        color: isActive(to) ? "#4fc3f7" : "#e3f2fd",
+        borderLeft: isActive(to) ? "4px solid #4fc3f7" : "4px solid transparent"
+      }}
+    >
+      <span style={{ marginRight: 10 }}>{icon}</span>
+      {label}
+    </Link>
+  );
+
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
+    <div style={{ display: "flex", minHeight: "100vh", background: "#f4f7f6" }}>
       {/* SIDEBAR */}
       <aside style={sidebarStyle}>
-        <h2 style={{ color: "#4fc3f7", marginBottom: 24 }}>Super Admin</h2>
+        <div style={{ marginBottom: 30, padding: "0 10px" }}>
+          <h2 style={{ color: "#4fc3f7", margin: "0 0 5px 0", letterSpacing: 1 }}>SUPER ADMIN</h2>
+          <div style={{ fontSize: 12, color: "#90caf9", wordBreak: "break-all" }}>{user?.email}</div>
+        </div>
 
         <nav style={navStyle}>
-          <Link to="/super" style={linkStyle}>Dashboard</Link>
-          <Link to="/super/insights" style={linkStyle}>Insights</Link>
-          <Link to="/super/orgs" style={linkStyle}>Organisations</Link>
-          <Link to="/super/admins" style={linkStyle}>Admins</Link>
-          <Link to="/super/machines" style={linkStyle}>Machines</Link>
-          <Link to="/super/issues" style={linkStyle}>Issues</Link> {/* 🆕 NEW LINK */}
-          <Link to="/super/audit" style={linkStyle}>Audit Logs</Link>
+          <NavLink to="/super" label="Dashboard" icon="📊" />
+          <NavLink to="/super/insights" label="Insights" icon="📈" />
+          <NavLink to="/super/orgs" label="Organisations" icon="🏢" />
+          <NavLink to="/super/admins" label="Admins" icon="👔" />
+          <NavLink to="/super/machines" label="Machines" icon="🤖" />
+          <NavLink to="/super/issues" label="Issues" icon="🚨" />
+          <NavLink to="/super/audit" label="Audit Logs" icon="📋" />
         </nav>
 
         <button onClick={handleLogout} style={logoutStyle}>
-          Logout
+          🚪 Logout
         </button>
       </aside>
 
       {/* MAIN CONTENT */}
-      <main style={{ flex: 1, padding: 24 }}>
+      {/* 🟢 Added overflowX: "auto" so wide tables scroll instead of pushing sidebar */}
+      <main style={{ flex: 1, overflowY: "auto", overflowX: "auto", height: "100vh", padding: 24, boxSizing: "border-box" }}>
         <Outlet />
       </main>
     </div>
@@ -47,38 +76,43 @@ export default function SuperAdminLayout() {
 
 const sidebarStyle = {
   width: 260,
+  minWidth: 260, // 🟢 Forces exact width
+  flexShrink: 0, // 🟢 Prevents Flexbox from shrinking the sidebar
   background: "linear-gradient(180deg,#0b1c2d,#0f2f4a)",
   color: "#fff",
-  padding: "20px 16px",
+  padding: "30px 16px",
   display: "flex",
   flexDirection: "column",
+  boxShadow: "4px 0 15px rgba(0,0,0,0.1)",
+  zIndex: 10
 };
 
 const navStyle = {
   display: "flex",
   flexDirection: "column",
-  gap: 10,
+  gap: 6,
 };
 
 const linkStyle = {
   textDecoration: "none",
-  color: "#e3f2fd",
-  background: "rgba(255,255,255,0.08)",
-  padding: "10px 12px",
-  borderRadius: 6,
-  fontWeight: 500,
-  transition: "background 0.2s ease",
-  display: "block",
+  padding: "12px 16px",
+  borderRadius: "0 8px 8px 0",
+  fontWeight: 600,
+  transition: "all 0.2s ease",
+  display: "flex",
+  alignItems: "center",
+  fontSize: 15
 };
 
 const logoutStyle = {
   marginTop: "auto",
-  padding: "10px",
-  background: "#e53935",
-  border: "none",
-  color: "#fff",
-  borderRadius: 6,
-  fontWeight: 600,
+  padding: "12px",
+  background: "rgba(229, 57, 53, 0.1)",
+  border: "1px solid rgba(229, 57, 53, 0.3)",
+  color: "#ef5350",
+  borderRadius: 8,
+  fontWeight: "bold",
   cursor: "pointer",
   width: "100%",
+  transition: "all 0.2s ease",
 };

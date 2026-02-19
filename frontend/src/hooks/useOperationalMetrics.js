@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebaseClient";
 
 export function useOperationalMetrics(days = 7) {
@@ -9,61 +9,51 @@ export function useOperationalMetrics(days = 7) {
       active: 0,
       disabled: 0,
       unassigned: 0,
-      stale: [], // Changed from stale7d to generic 'stale'
+      stale: [],
     },
-    refills: {
-      avgPercent: 0,
-    },
-    organisations: [], // Changed to array for full list
+    refills: { avgPercent: 0 },
+    organisations: [],
   });
 
   useEffect(() => {
     loadMetrics();
-  }, [days]); // Reload when 'days' changes
+  }, [days]);
 
   async function loadMetrics() {
     setLoading(true);
 
     try {
+      // Limit refill logs to recent ones so the browser doesn't crash on huge data
+      const recentLimit = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); 
+
       const [machineSnap, orgSnap, refillSnap] = await Promise.all([
         getDocs(collection(db, "machines")),
-        getDocs(collection(db, "organisations")),
-        getDocs(collection(db, "refill_logs")),
+        getDocs(query(collection(db, "organisations"), where("deleted", "==", false))),
+        getDocs(query(collection(db, "refill_logs"), where("createdAt", ">=", recentLimit), limit(1000))),
       ]);
 
       /* ───── MACHINES ───── */
-      let active = 0;
-      let disabled = 0;
-      let unassigned = 0;
+      let active = 0, disabled = 0, unassigned = 0;
       const stale = [];
-
       const now = Date.now();
       const STALE_THRESHOLD = days * 24 * 60 * 60 * 1000;
 
       machineSnap.forEach((doc) => {
         const m = doc.data();
 
+        if (m.deleted) return; // Skip deleted machines
+
         if (m.status === "active") active++;
-        else if (m.status === "disabled") disabled++;
+        else if (m.status === "disabled" || m.status === "service-down") disabled++;
         else unassigned++;
 
-        // Check for stale machines based on the selected 'days'
-        if (
-          m.last_refill_at &&
-          now - m.last_refill_at.toDate().getTime() > STALE_THRESHOLD
-        ) {
-          stale.push({
-            id: doc.id,
-            name: m.name,
-            orgId: m.orgId,
-          });
+        if (m.last_refill_at && now - m.last_refill_at.toDate().getTime() > STALE_THRESHOLD) {
+          stale.push({ id: doc.id, name: m.name, orgId: m.orgId });
         }
       });
 
       /* ───── REFILLS ───── */
-      let totalPercent = 0;
-      let refillCount = 0;
-
+      let totalPercent = 0, refillCount = 0;
       refillSnap.forEach((doc) => {
         const r = doc.data();
         if (typeof r.newPercent === "number") {
@@ -79,17 +69,8 @@ export function useOperationalMetrics(days = 7) {
       });
 
       setData({
-        machines: {
-          active,
-          disabled,
-          unassigned,
-          stale,
-        },
-        refills: {
-          avgPercent: refillCount
-            ? Math.round(totalPercent / refillCount)
-            : 0,
-        },
+        machines: { active, disabled, unassigned, stale },
+        refills: { avgPercent: refillCount ? Math.round(totalPercent / refillCount) : 0 },
         organisations,
       });
     } catch (err) {

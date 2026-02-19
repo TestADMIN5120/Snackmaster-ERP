@@ -1,11 +1,14 @@
 // src/pages/super/SuperAdminMachineCreate.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   doc,
   setDoc,
   serverTimestamp,
   addDoc,
   collection,
+  getDocs,
+  query,
+  where
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebaseClient";
@@ -28,14 +31,30 @@ export default function SuperAdminMachineCreate() {
   const navigate = useNavigate();
   const { user } = useAdmin();
 
+  const [orgs, setOrgs] = useState([]);
   const [form, setForm] = useState({
     id: "",
     name: "",
     location: "",
     capacity: "",
+    orgId: "", // 🟢 New Field
   });
 
   const [saving, setSaving] = useState(false);
+
+  // 🟢 Load Organizations on Mount
+  useEffect(() => {
+    async function loadOrgs() {
+      try {
+        const q = query(collection(db, "organisations"), where("deleted", "==", false));
+        const snap = await getDocs(q);
+        setOrgs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error("Failed to load organizations", err);
+      }
+    }
+    loadOrgs();
+  }, []);
 
   function updateField(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -57,9 +76,10 @@ export default function SuperAdminMachineCreate() {
         name: form.name,
         location: form.location || null,
         capacity: Number(form.capacity) || null,
-        orgId: null,
-        assigned: false,
-        status: "unassigned",
+        orgId: form.orgId || null, // 🟢 Assign to Org immediately
+        assigned: !!form.orgId,
+        status: form.orgId ? "active" : "unassigned",
+        deleted: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -68,6 +88,7 @@ export default function SuperAdminMachineCreate() {
         action: "MACHINE_CREATED",
         machineId: form.id,
         machineName: form.name,
+        assignedToOrg: form.orgId || "unassigned",
         performedBy: user?.email || "unknown",
         createdAt: serverTimestamp(),
       });
@@ -87,11 +108,12 @@ export default function SuperAdminMachineCreate() {
 
       <form onSubmit={createMachine}>
         <Field
-          label="Machine ID"
+          label="Machine ID (Hardware ID)"
           name="id"
           value={form.id}
           onChange={updateField}
-          placeholder="MACHINE_10012"
+          placeholder="e.g. SNACK-BLR-001"
+          required
         />
 
         <Field
@@ -99,7 +121,8 @@ export default function SuperAdminMachineCreate() {
           name="name"
           value={form.name}
           onChange={updateField}
-          placeholder="Snackmaster Lobby"
+          placeholder="e.g. Bangalore Lobby Block A"
+          required
         />
 
         <Field
@@ -117,9 +140,27 @@ export default function SuperAdminMachineCreate() {
           onChange={updateField}
         />
 
+        {/* 🟢 Dropdown to assign to an organization */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>
+            Assign to Organization
+          </label>
+          <select 
+            name="orgId" 
+            value={form.orgId} 
+            onChange={updateField} 
+            style={input}
+          >
+            <option value="">-- Leave Unassigned --</option>
+            {orgs.map(org => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </select>
+        </div>
+
         <div style={{ marginTop: 24 }}>
           <button type="submit" disabled={saving} style={btnPrimary}>
-            {saving ? "Creating…" : "Create Machine"}
+            {saving ? "Creating…" : "Create & Assign Machine"}
           </button>
 
           <button
@@ -148,9 +189,16 @@ const btnPrimary = {
   color: "#fff",
   border: "none",
   borderRadius: 6,
+  cursor: "pointer",
+  fontWeight: "bold"
 };
 
 const btnSecondary = {
   marginLeft: 12,
   padding: "10px 16px",
+  background: "#e0e0e0",
+  border: "none",
+  borderRadius: 6,
+  cursor: "pointer",
+  fontWeight: "bold"
 };

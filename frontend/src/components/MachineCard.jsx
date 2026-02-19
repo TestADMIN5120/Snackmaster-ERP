@@ -1,4 +1,4 @@
-// frontend/src/components/MachineCard.jsx
+ // frontend/src/components/MachineCard.jsx
 import React from "react";
 
 // Converts Firestore timestamp to readable date
@@ -14,16 +14,21 @@ function formatDate(ts) {
 export default function MachineCard({ machine = {}, onView }) {
   const percent = machine.current_stock_percent ?? 0;
 
-  // Improved color thresholds
+  // Premium color thresholds (Green / Orange / Red)
   const color =
-    percent >= 70 ? "#2ecc71" : percent >= 40 ? "#f1c40f" : "#e74c3c";
+    percent >= 70 ? "#10b981" : percent >= 30 ? "#f59e0b" : "#ef4444";
+
+  // Override status color if the machine is broken or offline
+  const isDown = machine.status === "issue_reported" || machine.status === "service-down";
+  const badgeBg = isDown ? "#fee2e2" : `${color}15`; // 15 is hex opacity
+  const badgeText = isDown ? "#ef4444" : color;
 
   return (
     <div
       onClick={() => onView && onView(machine.id)}
       style={outerCard}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-6px)";
+        e.currentTarget.style.transform = "translateY(-4px)";
         e.currentTarget.style.boxShadow = cardHoverShadow;
       }}
       onMouseLeave={(e) => {
@@ -40,23 +45,24 @@ export default function MachineCard({ machine = {}, onView }) {
         <div
           style={{
             ...statusBadge,
-            color,
-            border: `1px solid ${color}55`,
+            backgroundColor: badgeBg,
+            color: badgeText,
+            border: `1px solid ${badgeText}40`,
           }}
         >
-          {(machine.status || "UNKNOWN").toUpperCase()}
+          {(machine.status || "UNKNOWN").toUpperCase().replace("_", " ")}
         </div>
       </div>
 
       {/* LOCATION */}
-      <div style={subText}>📍 {machine.location || "-"}</div>
+      <div style={subText}>📍 {machine.location || "Location not set"}</div>
 
       {/* STOCK BAR */}
       <div style={stockRow}>
         <div style={stockBar}>
-          <div style={{ width: `${percent}%`, ...stockFill(color) }} />
+          <div style={{ width: `${Math.min(100, Math.max(0, percent))}%`, ...stockFill(color) }} />
         </div>
-        <div style={percentText}>{percent}%</div>
+        <div style={{...percentText, color: color}}>{percent}%</div>
       </div>
 
       {/* EXTRA MACHINE INFO */}
@@ -75,40 +81,43 @@ export default function MachineCard({ machine = {}, onView }) {
 const outerCard = {
   background: "#fff",
   borderRadius: 14,
-  padding: 18,
+  padding: 20,
   cursor: "pointer",
-  boxShadow: "0 8px 20px rgba(18,24,40,0.08)",
-  transition: "transform .18s ease, box-shadow .18s ease",
+  boxShadow: "0 4px 15px rgba(0,0,0,0.04)",
+  border: "1px solid #e2e8f0",
+  transition: "all .2s ease",
 };
 
 const headerRow = {
   display: "flex",
   justifyContent: "space-between",
-  marginBottom: 8,
+  alignItems: "flex-start",
+  marginBottom: 10,
 };
 
-const titleText = { fontWeight: 800, fontSize: 16, color: "#111" };
+const titleText = { fontWeight: 800, fontSize: 16, color: "#1e293b", lineHeight: 1.2 };
 
 const statusBadge = {
-  padding: "6px 12px",
-  borderRadius: 999,
-  fontSize: 11,
-  fontWeight: 700,
+  padding: "4px 8px",
+  borderRadius: 6,
+  fontSize: 10,
+  fontWeight: 800,
+  textAlign: "center"
 };
 
-const subText = { fontSize: 13, color: "#666", marginBottom: 12 };
+const subText = { fontSize: 13, color: "#64748b", marginBottom: 15 };
 
 const stockRow = {
   display: "flex",
   alignItems: "center",
-  gap: 10,
-  marginBottom: 12,
+  gap: 12,
+  marginBottom: 15,
 };
 
 const stockBar = {
   flex: 1,
-  height: 9,
-  background: "#ececec",
+  height: 8,
+  background: "#f1f5f9",
   borderRadius: 99,
   overflow: "hidden",
 };
@@ -116,15 +125,16 @@ const stockBar = {
 const stockFill = (color) => ({
   height: "100%",
   background: color,
+  borderRadius: 99,
 });
 
-const percentText = { fontSize: 14, fontWeight: 800, minWidth: 40 };
+const percentText = { fontSize: 14, fontWeight: 800, minWidth: 40, textAlign: "right" };
 
 const infoLine = {
   fontSize: 12,
-  color: "#444",
-  marginTop: 4,
+  color: "#64748b",
+  marginTop: 6,
 };
 
-const cardShadow = "0 8px 20px rgba(18,24,40,0.08)";
-const cardHoverShadow = "0 14px 30px rgba(18,24,40,0.16)";
+const cardShadow = "0 4px 15px rgba(0,0,0,0.04)";
+const cardHoverShadow = "0 12px 25px rgba(0,0,0,0.1)";

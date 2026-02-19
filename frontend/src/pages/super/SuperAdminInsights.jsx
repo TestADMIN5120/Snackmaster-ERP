@@ -1,134 +1,107 @@
 import React, { useState } from "react";
 import { useOperationalMetrics } from "../../hooks/useOperationalMetrics";
 
-// ✅ EXPORT DEFAULT IS HERE
 export default function SuperAdminInsights() {
-  console.log("🔥 SuperAdminInsights MOUNTED");
-
   const [days, setDays] = useState(7);
   const { loading, data } = useOperationalMetrics(days);
 
-  if (loading) {
-    return <div style={{ padding: 24 }}>Loading insights…</div>;
-  }
+  if (loading) return <div style={{ padding: 24 }}>Loading operational insights…</div>;
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1>Operational Insights</h1>
+    <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
+      <h1 style={{ color: "#1e293b", marginBottom: 20 }}>Operational Insights</h1>
 
       {/* TIME FILTER */}
-      <div style={{ margin: "12px 0 24px" }}>
+      <div style={{ marginBottom: 30, display: "flex", gap: 10 }}>
         {[7, 14, 30].map((d) => (
           <button
             key={d}
             onClick={() => setDays(d)}
             style={{
-              marginRight: 8,
-              padding: "6px 12px",
-              background: days === d ? "#1e88e5" : "#eee",
-              color: days === d ? "#fff" : "#000",
-              border: "none",
-              borderRadius: 6,
+              padding: "10px 20px",
+              background: days === d ? "#1e88e5" : "#fff",
+              color: days === d ? "#fff" : "#475569",
+              border: days === d ? "none" : "1px solid #cbd5e1",
+              borderRadius: 8,
               cursor: "pointer",
+              fontWeight: "bold"
             }}
           >
-            Last {d} days
+            Last {d} Days
           </button>
         ))}
       </div>
 
       {/* KPI CARDS */}
       <div style={grid}>
-        <Card title="Active Machines" value={data.machines.active} />
-        <Card title="Disabled Machines" value={data.machines.disabled} />
-        <Card title="Unassigned Machines" value={data.machines.unassigned} />
-        <Card title="Avg Refill %" value={`${data.refills.avgPercent}%`} />
+        <Card title="Active Machines" value={data.machines.active} color="#10b981" />
+        <Card title="Disabled/Down" value={data.machines.disabled} color="#ef4444" />
+        <Card title="Unassigned" value={data.machines.unassigned} color="#f59e0b" />
+        <Card title="Avg Refill Match" value={`${data.refills.avgPercent}%`} color="#3b82f6" />
       </div>
 
-      {/* STALE MACHINES */}
-      <Section title={`Machines not refilled in ${days} days`}>
-        <SimpleTable
-          rows={data.machines.stale}
-          empty="No stale machines 🎉"
-          columns={[
-            ["ID", "id"],
-            ["Name", "name"],
-            ["Org", "orgId"],
-          ]}
-        />
-      </Section>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginTop: 40 }}>
+        {/* STALE MACHINES */}
+        <div style={panel}>
+          <h2 style={panelTitle}>Machines not refilled in {days} days</h2>
+          <SimpleTable
+            rows={data.machines.stale}
+            empty="No stale machines 🎉"
+            columns={[
+              ["Machine ID", "id"],
+              ["Org ID", "orgId"]
+            ]}
+          />
+        </div>
 
-      {/* ORG HEALTH */}
-      <Section title="Organisation Health">
-        <SimpleTable
-          rows={data.organisations.map((o) => ({
-            ...o,
-            health: getHealth(o, data.machines), // Now passing full machine list handled in hook/component logic if needed, 
-                                                 // but for simple display:
-            // logic below requires raw machine list? 
-            // The hook returns aggregates. 
-            // For this specific 'health' function to work perfectly, 
-            // you might need the full machine list in 'data.machines.all' 
-            // or simplify the health check.
-            // For now, I will assume simple status check:
-          }))}
-          empty="No organisations"
-          columns={[
-            ["Org ID", "id"],
-            ["Name", "name"],
-            ["Status", "status"], // Simplified to show status directly
-          ]}
-        />
-      </Section>
+        {/* ORG HEALTH */}
+        <div style={panel}>
+          <h2 style={panelTitle}>Organisation Health Check</h2>
+          <SimpleTable
+            rows={data.organisations.map((o) => ({
+              ...o,
+              health: o.deleted ? "🔴 DELETED" : (o.status === "active" ? "🟢 ACTIVE" : "🟡 PENDING")
+            }))}
+            empty="No organisations"
+            columns={[
+              ["Organisation", "name"],
+              ["Status", "health"]
+            ]}
+          />
+        </div>
+      </div>
     </div>
   );
 }
 
-/* ───────── HELPERS ───────── */
-
-// Simplified health check based on org status only
-// (Since we aren't pulling every single machine into the hook state to filter by org here)
-function getHealth(org) {
-    if (org.suspended) return "🔴 CRITICAL";
-    if (org.status !== 'active') return "🟡 ATTENTION";
-    return "🟢 HEALTHY";
-}
-
-function Card({ title, value }) {
+function Card({ title, value, color }) {
   return (
-    <div style={card}>
-      <h3>{title}</h3>
-      <div style={{ fontSize: 28, fontWeight: 800 }}>{value}</div>
-    </div>
-  );
-}
-
-function Section({ title, children }) {
-  return (
-    <div style={{ marginTop: 32 }}>
-      <h2>{title}</h2>
-      {children}
+    <div style={{ background: "#fff", padding: 24, borderRadius: 12, borderTop: `4px solid ${color}`, boxShadow: "0 4px 14px rgba(0,0,0,.04)" }}>
+      <h3 style={{ margin: "0 0 10px 0", color: "#64748b", fontSize: 14, textTransform: "uppercase" }}>{title}</h3>
+      <div style={{ fontSize: 36, fontWeight: 800, color: "#1e293b" }}>{value}</div>
     </div>
   );
 }
 
 function SimpleTable({ rows, columns, empty }) {
-  if (!rows.length) return <div style={{ color: "#777" }}>{empty}</div>;
+  if (!rows || !rows.length) return <div style={{ color: "#94a3b8", padding: 20, textAlign: "center" }}>{empty}</div>;
 
   return (
     <table style={{ width: "100%", borderCollapse: "collapse" }}>
       <thead>
-        <tr style={thead}>
+        <tr style={{ borderBottom: "2px solid #e2e8f0", textAlign: "left" }}>
           {columns.map((c) => (
-            <th key={c[0]} style={{ padding: "8px 0" }}>{c[0]}</th>
+            <th key={c[0]} style={{ padding: "12px", color: "#64748b", fontSize: 13, textTransform: "uppercase" }}>{c[0]}</th>
           ))}
         </tr>
       </thead>
       <tbody>
         {rows.map((r, i) => (
-          <tr key={i} style={row}>
+          <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
             {columns.map((c) => (
-              <td key={c[1]} style={{ padding: "8px 0" }}>{r[c[1]] || "—"}</td>
+              <td key={c[1]} style={{ padding: "12px", fontSize: 14, fontWeight: c[1] === 'name' || c[1] === 'id' ? 'bold' : 'normal' }}>
+                {r[c[1]] || "—"}
+              </td>
             ))}
           </tr>
         ))}
@@ -137,26 +110,6 @@ function SimpleTable({ rows, columns, empty }) {
   );
 }
 
-/* ───────── STYLES ───────── */
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
-  gap: 16,
-};
-
-const card = {
-  background: "#fff",
-  padding: 20,
-  borderRadius: 12,
-  boxShadow: "0 4px 14px rgba(0,0,0,.08)",
-};
-
-const thead = {
-  borderBottom: "2px solid #ddd",
-  textAlign: "left",
-};
-
-const row = {
-  borderBottom: "1px solid #eee",
-};
+const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 20 };
+const panel = { background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 4px 14px rgba(0,0,0,.04)", border: "1px solid #e2e8f0" };
+const panelTitle = { margin: "0 0 20px 0", fontSize: 18, color: "#1e293b" };

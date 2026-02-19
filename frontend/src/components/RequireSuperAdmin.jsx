@@ -7,7 +7,11 @@ export default function RequireSuperAdmin({ children }) {
   const location = useLocation();
 
   if (loading) {
-    return <div>Checking permissions...</div>;
+    return (
+      <div style={{ height: "100vh", display: "flex", justifyContent: "center", alignItems: "center" }}>
+        Checking permissions...
+      </div>
+    );
   }
 
   if (!user) {

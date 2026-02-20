@@ -3,12 +3,15 @@ import {
   doc,
   getDoc,
   updateDoc,
+  collection,
+  getDocs,
   serverTimestamp
 } from "firebase/firestore";
 import { useParams, useNavigate } from "react-router-dom";
 import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
-import axios from "axios"; // 🟢 Added for Centralized Backend Logic
+import axios from "axios";
+import { generateBulkReportPDF } from "../../utils/pdfGenerator";
 
 export default function RefillerMachinePage() {
   const { machineId } = useParams();
@@ -16,15 +19,12 @@ export default function RefillerMachinePage() {
   const { user } = useAdmin();
 
   const [machine, setMachine] = useState(null);
+  const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // 🟢 UX State Controls
-  const [refillStartedAt, setRefillStartedAt] = useState(null);
-  const [checkSlots, setCheckSlots] = useState(false);
-  const [checkDoor, setCheckDoor] = useState(false);
+  // UX State Controls
+  const [isRefilling, setIsRefilling] = useState(false); // 🟢 FIXED: Defined this state
   const [saving, setSaving] = useState(false);
-  
-  // 🟢 Post-Refill Success State
   const [successData, setSuccessData] = useState(null);
 
   useEffect(() => {
@@ -41,6 +41,11 @@ export default function RefillerMachinePage() {
         return;
       }
       setMachine({ id: mSnap.id, ...mSnap.data() });
+
+      const snapSlots = await getDocs(collection(db, "machines", machineId, "slots"));
+      const sList = snapSlots.docs.map(d => ({ id: d.id, ...d.data() }));
+      sList.sort((a, b) => (Number(a.tray) * 10 + Number(a.slot_number)) - (Number(b.tray) * 10 + Number(b.slot_number)));
+      setSlots(sList);
     } catch (err) {
       console.error("Error loading machine data:", err);
     } finally {
@@ -48,195 +53,148 @@ export default function RefillerMachinePage() {
     }
   }
 
-  // --- ACTIONS ---
-
-  function handleMakeKitClick() {
-    navigate(`/refiller/machines/${machineId}/make-kit`);
-  }
-
   function startRefill() {
-    setRefillStartedAt(Date.now());
-    // Locally trigger the state in Firestore so Admins see it's being worked on
+    setIsRefilling(true); // 🟢 Triggers the Grid View
     updateDoc(doc(db, "machines", machineId), {
       status: "refill_in_progress",
       lastRefillStartedAt: serverTimestamp()
     });
   }
 
-  async function completeRefill() {
-    // 🔒 UX Safety Lock (Same as your current code)
-    if (!checkSlots || !checkDoor) return; 
-    
-    setSaving(true);
-    const durationSeconds = Math.floor((Date.now() - refillStartedAt) / 1000);
-    const durationMinutes = Math.floor(durationSeconds / 60);
+  const handleSlotQtyChange = (id, newVal) => {
+    setSlots(prev => prev.map(s => s.id === id ? { ...s, current_qty: Number(newVal) } : s));
+  };
 
+  async function completeRefill() {
+    setSaving(true);
     try {
-      // 🟢 PRODUCTION FIX: Use centralized Express Backend instead of raw addDoc
-      // This ensures Kit closure, Machine update, and Logs happen in one atomic transaction
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5001";
+      // 🟢 FIXED URL: Ensures we don't get /api/api/
+      const rawUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5001";
+      const backendUrl = rawUrl.replace(/\/api$/, ""); // Remove /api if it exists at the end
       
+      // 1. Sync slot counts to Firestore (Updates Admin Panel instantly)
+      const syncTasks = slots.map(s => 
+        updateDoc(doc(db, "machines", machineId, "slots", s.id), {
+          current_qty: s.current_qty,
+          updatedAt: serverTimestamp()
+        })
+      );
+      await Promise.all(syncTasks);
+
+      // 2. Trigger Backend logic
       const response = await axios.post(`${backendUrl}/api/confirm-refill`, {
-        machineId: machineId,
+        machineId,
         orgId: machine.orgId, 
         refillerId: user.uid,
         userEmail: user.email,
         kitId: machine.activeKitId || null,
-        products: [] // Optional: send items if you want detailed line-item logging
+        products: slots.map(s => ({ 
+            name: s.product_name, 
+            qty: s.current_qty, 
+            slot: `${s.tray}${s.slot_number}` 
+        })) 
       });
 
       if (response.data.ok) {
-        // 🟢 Show Success Screen (Preserved from your code)
-        setSuccessData({
-          duration: durationMinutes < 1 ? "< 1 min" : `${durationMinutes} mins`,
-          syncStatus: navigator.onLine ? "🟢 Synced to Server successfully." : "🟡 Saved locally (Offline Sync Mode)."
-        });
+        setSuccessData({ date: new Date().toLocaleString() });
       }
 
     } catch (err) {
       console.error("Refill processing error:", err);
-      alert("Failed to confirm refill. Please check your backend connection.");
+      alert("Error confirming refill. Please ensure the Backend is running on port 5001.");
     } finally {
       setSaving(false);
     }
   }
 
-  // --- RENDER ---
+  const downloadRefillSummary = () => {
+    const cols = ["Slot", "Product Item", "Final Machine Qty"];
+    const rows = slots.map(s => [`${s.tray}${s.slot_number}`, s.product_name || "Empty", s.current_qty]);
+    generateBulkReportPDF(`Refill_Summary_${machine.name}`, cols, rows, machine.orgId);
+  };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading machine details...</div>;
-  if (!machine) return <div style={{ padding: 40, textAlign: 'center' }}>Machine not found</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>Syncing Machine Layout...</div>;
   
-  const isRefilling = !!refillStartedAt;
-  const isIssue = machine.status === "issue_reported";
-
-  // 🟢 1. SUCCESS SCREEN (Exact UX from your code)
   if (successData) {
     return (
       <div style={{ padding: "20px", maxWidth: "600px", margin: "40px auto", textAlign: "center" }}>
-        <div style={{ background: "#e8f5e9", padding: "40px 20px", borderRadius: "12px", border: "2px solid #4caf50", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
-          <h1 style={{ fontSize: "50px", margin: "0 0 10px 0" }}>✅</h1>
-          <h2 style={{ color: "#2e7d32", margin: "0 0 20px 0" }}>Refill Completed!</h2>
-          
-          <div style={{ background: "#fff", padding: "15px", borderRadius: "8px", marginBottom: "20px", display: "inline-block", textAlign: "left", border: "1px solid #c8e6c9" }}>
-            <p style={{ margin: "5px 0", fontSize: "16px" }}>⏱️ <strong>Time Taken:</strong> {successData.duration}</p>
-            <p style={{ margin: "5px 0", fontSize: "16px" }}>📡 <strong>Status:</strong> {successData.syncStatus}</p>
+        <div style={successCard}>
+          <h1 style={{ fontSize: "50px", margin: "0" }}>✅</h1>
+          <h2 style={{ color: "#2e7d32" }}>Refill Successfully Synced</h2>
+          <div style={{display:'flex', gap: 12, flexDirection: 'column', marginTop: 20}}>
+            <button onClick={downloadRefillSummary} style={btnSecondary}>📥 Download PDF Summary</button>
+            <button onClick={() => navigate("/refiller")} style={btnPrimary}>Return to Dashboard</button>
           </div>
-
-          <button onClick={() => navigate("/refiller")} style={btnPrimary}>
-            Back to Dashboard
-          </button>
         </div>
       </div>
     );
   }
 
-  // 🟢 2. NORMAL FLOW SCREEN (Exact features from your code)
   return (
-    <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto", paddingBottom: 100 }}>
-      
-      <button onClick={() => navigate("/refiller")} style={btnBack}>← Dashboard</button>
+    <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto", paddingBottom: 100 }}>
+      <button onClick={() => navigate("/refiller")} style={btnBack}>← Back to Route</button>
       
       <div style={headerCard}>
-        <h1 style={{ margin: 0, color: "#1e293b" }}>{machine.name}</h1>
-        <p style={{ color: "#64748b", fontFamily: "monospace", margin: "5px 0" }}>{machine.id}</p>
-        
-        {isIssue ? (
-           <div style={{ marginTop: 15, padding: "12px", background: "#fee2e2", color: "#991b1b", borderRadius: 8, fontWeight: "bold", border: "1px solid #fecaca", textAlign: 'center' }}>
-             🔴 Machine is Down (Issue Reported)
-           </div>
-        ) : (
-           <div style={{ marginTop: 10, fontSize: 14 }}>Status: <strong style={{ color: "#1976d2" }}>{machine.status?.toUpperCase().replace("_", " ")}</strong></div>
-        )}
+        <h1 style={{ margin: 0 }}>{machine.name}</h1>
+        <div style={{ marginTop: 10 }}>Status: <strong style={{ color: "#1976d2" }}>{machine.status?.toUpperCase()}</strong></div>
       </div>
 
-      {/* 🔴 IF ISSUE REPORTED, DISABLE REFILL WORKFLOW */}
-      {isIssue ? (
-        <div style={section}>
-          <p style={{ color: "#666", fontSize: "16px", lineHeight: "1.5", textAlign: 'center' }}>
-            You cannot refill this machine until an Admin resolves the reported issue.
-          </p>
-        </div>
-      ) : (
+      {!isRefilling ? (
         <>
-          {/* PHASE 1: PREPARATION */}
-          {!isRefilling && (
-            <div style={section}>
-              <h3 style={{ marginTop: 0, color: '#334155' }}>1. Warehouse Prep</h3>
-              <div style={actionRow}>
-                <button 
-                  onClick={handleMakeKitClick} 
-                  style={machine.activeKitId ? btnDisabled : btnPrimary}
-                  disabled={!!machine.activeKitId}
-                >
-                  {machine.activeKitId ? "✅ Kit Prepared (CSV)" : "⚡ Auto-Calculate Kit (CSV)"}
-                </button>
-              </div>
-            </div>
-          )}
+          <div style={section}>
+            <h3>1. Preparation</h3>
+            <button onClick={() => navigate(`/refiller/machines/${machineId}/make-kit`)} style={machine.activeKitId ? btnDisabled : btnPrimary} disabled={!!machine.activeKitId}>
+              {machine.activeKitId ? "✅ Warehouse Kit Prepared" : "📦 Auto-Generate Kit (CSV)"}
+            </button>
+          </div>
 
-          {/* PHASE 2: AT MACHINE */}
-          {!isRefilling && (
-            <div style={section}>
-              <h3 style={{ marginTop: 0, color: '#334155' }}>2. At Machine</h3>
-              <div style={actionRow}>
-                <button 
-                  onClick={startRefill}
-                  style={machine.kitStatus === "prepared" ? btnGreen : btnLocked}
-                  disabled={machine.kitStatus !== "prepared"}
-                >
-                  🚀 Start Refill Timer
-                </button>
-                <button onClick={() => navigate(`/refiller/machines/${machineId}/report-issue`)} style={btnDanger}>
-                  ⚠️ Report Issue
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* PHASE 3: ACTIVE REFILL (THE LOCKDOWN UX) */}
-          {isRefilling && (
-            <div style={activeRefillBox}>
-              <h2 style={{ marginTop: 0, color: "#d84315" }}>🔥 Refill in Progress</h2>
-              <p style={{ color: "#555", marginBottom: 20 }}>Timer is running. Please verify the following before finishing:</p>
-              
-              <label style={checkboxLabel}>
-                <input type="checkbox" checked={checkSlots} onChange={e => setCheckSlots(e.target.checked)} style={checkbox} />
-                <span style={{ fontSize: 18, fontWeight: "500" }}>🍫 All required slots are filled</span>
-              </label>
-
-              <label style={checkboxLabel}>
-                <input type="checkbox" checked={checkDoor} onChange={e => setCheckDoor(e.target.checked)} style={checkbox} />
-                <span style={{ fontSize: 18, fontWeight: "500" }}>🚪 Machine door is securely locked</span>
-              </label>
-
-              <button 
-                onClick={completeRefill} 
-                style={checkSlots && checkDoor ? btnFinish : btnFinishDisabled}
-                disabled={!checkSlots || !checkDoor || saving}
-              >
-                {saving ? "Processing..." : "✅ Complete Refill"}
+          <div style={section}>
+            <h3>2. Physical Refill</h3>
+            <div style={actionRow}>
+              <button onClick={startRefill} style={machine.kitStatus === "issued" ? btnGreen : btnLocked} disabled={machine.kitStatus !== "issued"}>
+                🚀 Start Physical Refill Grid
               </button>
+              <button onClick={() => navigate(`/refiller/machines/${machineId}/report-issue`)} style={btnDanger}>⚠️ Report Issue</button>
             </div>
-          )}
+            {machine.kitStatus !== "issued" && <p style={{color: '#ef4444', fontSize: 13, marginTop: 10, fontWeight:'bold'}}>LOCKED: Admin must "Issue Kit" from Warehouse first.</p>}
+          </div>
         </>
+      ) : (
+        <div style={activeRefillBox}>
+          <h2 style={{ marginTop: 0, color: "#d84315" }}>🛠️ Live Machine Audit</h2>
+          <p style={{ color: "#64748b", marginBottom: 20 }}>Update final quantity for each slot.</p>
+          <div style={slotGrid}>
+            {slots.map(s => (
+              <div key={s.id} style={slotItem}>
+                <div style={{fontWeight:'bold'}}>Slot {s.tray}{s.slot_number}</div>
+                <div style={prodText}>{s.product_name || "Empty"}</div>
+                <input type="number" value={s.current_qty} onChange={e => handleSlotQtyChange(s.id, e.target.value)} style={inputSmall} />
+                <div style={{fontSize: 10, color: '#94a3b8', marginTop: 5}}>Cap: {s.capacity}</div>
+              </div>
+            ))}
+          </div>
+          <button onClick={completeRefill} disabled={saving} style={btnFinish}>{saving ? "Updating Inventory..." : "🏁 Complete Refill & Sync"}</button>
+        </div>
       )}
     </div>
   );
 }
 
 // Styles
-const headerCard = { background: "#fff", padding: 20, borderRadius: 12, boxShadow: "0 2px 5px rgba(0,0,0,0.05)", marginBottom: 20, border: "1px solid #e2e8f0" };
-const section = { marginBottom: 25, background: "#fff", padding: 20, borderRadius: 12, border: "1px solid #e2e8f0" };
+const headerCard = { background: "#fff", padding: 25, borderRadius: 12, border: "1px solid #e2e8f0", marginBottom: 20 };
+const section = { marginBottom: 25, background: "#fff", padding: 25, borderRadius: 12, border: "1px solid #e2e8f0" };
 const actionRow = { display: "flex", gap: 10 };
-const activeRefillBox = { background: "#fff3e0", padding: 25, borderRadius: 12, border: "2px solid #ffb74d", boxShadow: "0 4px 12px rgba(255, 183, 77, 0.3)" };
-const btnBack = { border: "none", background: "none", color: "#1976d2", cursor: "pointer", marginBottom: 15, fontWeight: "bold", fontSize: 16, padding: 0 };
-const btnPrimary = { flex: 1, padding: 15, background: "#1976d2", color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", cursor: "pointer", fontSize: 16 };
-const btnDanger = { flex: 1, padding: 15, background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", cursor: "pointer", fontSize: 16 };
-const btnGreen = { flex: 1, padding: 15, background: "#2e7d32", color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", cursor: "pointer", fontSize: 16 };
-const btnFinish = { width: "100%", padding: 18, background: "#d84315", color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", cursor: "pointer", marginTop: 20, fontSize: 18, boxShadow: "0 4px 10px rgba(216, 67, 21, 0.3)" };
-const btnFinishDisabled = { width: "100%", padding: 18, background: "#ffccbc", color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", cursor: "not-allowed", marginTop: 20, fontSize: 18 };
-const btnDisabled = { flex: 1, padding: 15, background: "#e2e8f0", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, cursor: "not-allowed", fontSize: 16, fontWeight: "bold" };
-const btnLocked = { flex: 1, padding: 15, background: "#f1f5f9", color: "#94a3b8", border: "1px dashed #cbd5e1", borderRadius: 8, cursor: "not-allowed", fontSize: 16, fontWeight: "bold" };
-
-const checkboxLabel = { display: 'flex', alignItems: 'center', gap: 15, padding: "15px", background: "#fff", borderRadius: "8px", marginBottom: "10px", border: "1px solid #ffccbc", cursor: "pointer", userSelect: "none" };
-const checkbox = { width: "24px", height: "24px", cursor: "pointer" };
+const activeRefillBox = { background: "#fff", padding: 25, borderRadius: 12, border: "2px solid #fbbf24", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)" };
+const btnBack = { border: "none", background: "none", color: "#3b82f6", cursor: "pointer", marginBottom: 15, fontWeight: "bold" };
+const btnPrimary = { width: '100%', padding: 15, background: "#1976d2", color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", cursor: "pointer" };
+const btnSecondary = { width: '100%', padding: 15, background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: "bold", cursor: "pointer" };
+const btnDanger = { flex: 1, padding: 15, background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", cursor: "pointer" };
+const btnGreen = { flex: 2, padding: 15, background: "#10b981", color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", cursor: "pointer" };
+const btnFinish = { width: "100%", padding: 20, background: "#d84315", color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", cursor: "pointer", fontSize: 18, marginTop: 20 };
+const btnDisabled = { width: '100%', padding: 15, background: "#e2e8f0", color: "#64748b", borderRadius: 8, cursor: "not-allowed" };
+const btnLocked = { flex: 2, padding: 15, background: "#f1f5f9", color: "#94a3b8", border: "1px dashed #cbd5e1", borderRadius: 8, cursor: "not-allowed" };
+const slotGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 12 };
+const slotItem = { padding: 12, background: "#f8fafc", borderRadius: 10, border: "1px solid #e2e8f0", textAlign: 'center' };
+const inputSmall = { width: "70%", padding: "8px", borderRadius: 6, border: "1px solid #3b82f6", textAlign: 'center', fontWeight: 'bold', fontSize: 18, outline: 'none' };
+const prodText = { fontSize: 12, color: '#475569', margin: '6px 0', height: 32, overflow:'hidden', lineHeight: '1.2' };
+const successCard = { background: "#e8f5e9", padding: "40px", borderRadius: "16px", border: "2px solid #4caf50" };

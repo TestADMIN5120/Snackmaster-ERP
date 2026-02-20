@@ -1,14 +1,9 @@
 import React, { useEffect, useState } from "react";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-} from "firebase/firestore";
+import { collection, query, where, orderBy, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
 import { useNavigate } from "react-router-dom";
+import { generateKitPDF } from "../../utils/pdfGenerator"; // 🟢 ADDED PDF IMPORT
 
 export default function RefillerHistory() {
   const { user } = useAdmin();
@@ -23,7 +18,6 @@ export default function RefillerHistory() {
 
   async function loadLogs() {
     try {
-      // 🟢 SECURE: Only show logs for this specific refiller
       const q = query(
         collection(db, "refill_logs"),
         where("refillerId", "==", user.uid),
@@ -31,13 +25,36 @@ export default function RefillerHistory() {
       );
 
       const snap = await getDocs(q);
-
       setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (err) {
       console.error("❌ Failed loading refill history", err);
     } finally {
       setLoading(false);
     }
+  }
+
+  // 🟢 Download Logic: Fetch the actual kit doc to get the line-items
+  async function handleDownload(kitId) {
+      if (!kitId) return alert("No Kit associated with this refill.");
+      try {
+          const kitSnap = await getDoc(doc(db, "kits", kitId));
+          if(kitSnap.exists()) {
+              generateKitPDF({ id: kitSnap.id, ...kitSnap.data() });
+          } else {
+              alert("Kit details not found.");
+          }
+      } catch (e) {
+          console.error(e);
+          alert("Error downloading PDF.");
+      }
+  }
+
+  // 🟢 Security Rule Check: Only show download if < 24 hours old
+  function isWithin24Hours(timestamp) {
+      if (!timestamp) return false;
+      const logDate = timestamp.seconds ? timestamp.seconds * 1000 : timestamp;
+      const hoursDifference = (Date.now() - logDate) / (1000 * 60 * 60);
+      return hoursDifference <= 24;
   }
 
   if (loading) return <div style={{ padding: 24, textAlign: "center", color: "#64748b" }}>Loading history...</div>;
@@ -66,11 +83,18 @@ export default function RefillerHistory() {
                   <div style={{ fontWeight: "bold", fontSize: 16, color: "#0f172a" }}>{log.machineName || "Unknown Machine"}</div>
                   <div style={{ fontSize: 12, color: "#64748b", fontFamily: "monospace" }}>{log.machineId}</div>
                 </div>
-                <div style={{ textAlign: "right" }}>
+                <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
                   {log.offline ? (
                     <span style={badgeWarning}>🟡 Pending Sync</span>
                   ) : (
                     <span style={badgeSuccess}>🟢 Synced</span>
+                  )}
+                  
+                  {/* 🟢 CONDITIONAL PDF BUTTON */}
+                  {log.kitId && isWithin24Hours(log.completedAt) && (
+                      <button onClick={() => handleDownload(log.kitId)} style={btnDownloadGhost}>
+                          📄 Get PDF
+                      </button>
                   )}
                 </div>
               </div>
@@ -97,3 +121,4 @@ const tableCard = { display: "flex", flexDirection: "column", gap: 15 };
 const mobileCard = { background: "#fff", padding: 16, borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0" };
 const badgeSuccess = { background: "#e8f5e9", color: "#2e7d32", padding: "4px 8px", borderRadius: 12, fontSize: 11, fontWeight: "bold" };
 const badgeWarning = { background: "#fff3e0", color: "#ef6c00", padding: "4px 8px", borderRadius: 12, fontSize: 11, fontWeight: "bold" };
+const btnDownloadGhost = { background: "#f0f9ff", color: "#0284c7", border: "1px solid #bae6fd", padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: "bold", cursor: "pointer" };

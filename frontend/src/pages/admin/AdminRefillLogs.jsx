@@ -1,4 +1,4 @@
- // frontend/src/pages/admin/AdminRefillLogs.jsx
+// frontend/src/pages/admin/AdminRefillLogs.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import {
   collection,
@@ -13,26 +13,35 @@ import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
 
 export default function AdminRefillLogs() {
-  const { orgId } = useAdmin(); // 🟢 SECURE: Get orgId
+  const { orgId } = useAdmin(); 
   const [logs, setLogs] = useState([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
-  // 🟢 SECURE LIVE QUERY
+  // 🟢 Standardized Query for all refillers in the Org
   useEffect(() => {
     if (!orgId) return;
 
     const q = query(
-        collection(db, "refill_logs"),
-        where("orgId", "==", orgId),
-        orderBy("createdAt", "desc")
+      collection(db, "refill_logs"),
+      where("orgId", "==", orgId),
+      orderBy("createdAt", "desc")
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        console.log(`AdminLogs: ${data.length} logs found for org ${orgId}`);
+        setLogs(data);
+      },
+      (err) => {
+        console.error("AdminLogs Error:", err);
+      }
+    );
+
     return () => unsub();
   }, [orgId]);
 
@@ -86,11 +95,17 @@ export default function AdminRefillLogs() {
   }
 
   function exportCSV() {
-    const header = "Refiller Email,Machine ID,Machine Name,Duration (mins),Date,Offline Sync\n";
+    const header =
+      "Refiller Email,Machine ID,Machine Name,Duration (mins),Date,Offline Sync\n";
+
     const rows = filtered
       .map(
         (l) =>
-          `${l.userEmail || "-"},${l.machineId || "-"},${l.machineName || "-"},${l.durationMinutes || "0"},${formatDate(l.createdAt)},${l.offline ? 'Yes' : 'No'}`
+          `${l.userEmail || "-"},${l.machineId || "-"},${
+            l.machineName || "-"
+          },${l.durationMinutes || "0"},${formatDate(l.createdAt)},${
+            l.offline ? "Yes" : "No"
+          }`
       )
       .join("\n");
 
@@ -106,7 +121,17 @@ export default function AdminRefillLogs() {
       <h1 style={{ marginBottom: 20 }}>Refiller Activity Logs</h1>
 
       {/* Filters */}
-      <div style={{ display: "flex", gap: 15, marginBottom: 20, background: "#fff", padding: 15, borderRadius: 10, border: "1px solid #e2e8f0" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 15,
+          marginBottom: 20,
+          background: "#fff",
+          padding: 15,
+          borderRadius: 10,
+          border: "1px solid #e2e8f0"
+        }}
+      >
         <input
           value={search}
           onChange={(e) => {
@@ -137,54 +162,108 @@ export default function AdminRefillLogs() {
       </div>
 
       {/* Table */}
-      <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: 10,
+          border: "1px solid #e2e8f0",
+          overflow: "hidden"
+        }}
+      >
         <table style={table}>
-            <thead style={{ background: "#f8fafc" }}>
+          <thead style={{ background: "#f8fafc" }}>
             <tr>
-                <th style={th}>Refiller</th>
-                <th style={th}>Machine</th>
-                <th style={th}>Duration</th>
-                <th style={th}>Timestamp</th>
-                <th style={th}>Status</th>
-                <th style={th}>Delete</th>
+              <th style={th}>Refiller</th>
+              <th style={th}>Machine</th>
+              <th style={th}>Duration</th>
+              <th style={th}>Timestamp</th>
+              <th style={th}>Status</th>
+              <th style={th}>Delete</th>
             </tr>
-            </thead>
-            <tbody>
+          </thead>
+          <tbody>
             {paged.map((l) => (
-                <tr key={l.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={td}><b>{l.userEmail || "-"}</b></td>
+              <tr key={l.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
                 <td style={td}>
-                    <div>{l.machineName || "Unknown"}</div>
-                    <div style={{fontSize: 12, color: "#666"}}>{l.machineId}</div>
+                  <b>{l.userEmail || "-"}</b>
+                </td>
+                <td style={td}>
+                  <div>{l.machineName || "Unknown"}</div>
+                  <div style={{ fontSize: 12, color: "#666" }}>
+                    {l.machineId}
+                  </div>
                 </td>
                 <td style={td}>{l.durationMinutes || "0"} mins</td>
                 <td style={td}>{formatDate(l.createdAt)}</td>
                 <td style={td}>
-                    {l.offline ? (
-                        <span style={{background: "#fff3e0", color: "#ef6c00", padding: "4px 8px", borderRadius: 10, fontSize: 11, fontWeight: "bold"}}>📴 OFFLINE SYNC</span>
-                    ) : (
-                        <span style={{background: "#e8f5e9", color: "#2e7d32", padding: "4px 8px", borderRadius: 10, fontSize: 11, fontWeight: "bold"}}>🟢 SYNCED</span>
-                    )}
+                  {l.offline ? (
+                    <span
+                      style={{
+                        background: "#fff3e0",
+                        color: "#ef6c00",
+                        padding: "4px 8px",
+                        borderRadius: 10,
+                        fontSize: 11,
+                        fontWeight: "bold"
+                      }}
+                    >
+                      📴 OFFLINE SYNC
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        background: "#e8f5e9",
+                        color: "#2e7d32",
+                        padding: "4px 8px",
+                        borderRadius: 10,
+                        fontSize: 11,
+                        fontWeight: "bold"
+                      }}
+                    >
+                      🟢 SYNCED
+                    </span>
+                  )}
                 </td>
                 <td style={td}>
-                    <button onClick={() => deleteLog(l.id)} style={btnDel}>X</button>
+                  <button onClick={() => deleteLog(l.id)} style={btnDel}>
+                    X
+                  </button>
                 </td>
-                </tr>
+              </tr>
             ))}
-            </tbody>
+          </tbody>
         </table>
+
         {paged.length === 0 && (
-            <div style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>No refill logs match your criteria.</div>
+          <div
+            style={{
+              padding: 40,
+              textAlign: "center",
+              color: "#94a3b8"
+            }}
+          >
+            No refill logs match your criteria.
+          </div>
         )}
       </div>
 
       {/* Pagination */}
-      <div style={{ marginTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div
+        style={{
+          marginTop: 20,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}
+      >
         <div style={{ color: "#64748b" }}>
           Rows per page:
           <select
             value={pageSize}
-            onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
             style={{ marginLeft: 10, padding: 4, borderRadius: 4 }}
           >
             <option value={10}>10</option>
@@ -194,10 +273,18 @@ export default function AdminRefillLogs() {
         </div>
 
         <div style={{ display: "flex", gap: 10 }}>
-          <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} style={btnPage(page === 1)}>
+          <button
+            disabled={page === 1}
+            onClick={() => setPage((p) => p - 1)}
+            style={btnPage(page === 1)}
+          >
             Prev
           </button>
-          <button disabled={page * pageSize >= filtered.length} onClick={() => setPage((p) => p + 1)} style={btnPage(page * pageSize >= filtered.length)}>
+          <button
+            disabled={page * pageSize >= filtered.length}
+            onClick={() => setPage((p) => p + 1)}
+            style={btnPage(page * pageSize >= filtered.length)}
+          >
             Next
           </button>
         </div>
@@ -206,10 +293,48 @@ export default function AdminRefillLogs() {
   );
 }
 
-const inputStyle = { flex: 1, padding: "10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 14 };
-const exportBtn = { background: "#10b981", color: "#fff", padding: "10px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontWeight: "bold" };
+// Styles
+const inputStyle = {
+  flex: 1,
+  padding: "10px",
+  borderRadius: 6,
+  border: "1px solid #cbd5e1",
+  fontSize: 14
+};
+const exportBtn = {
+  background: "#10b981",
+  color: "#fff",
+  padding: "10px 16px",
+  borderRadius: 6,
+  border: "none",
+  cursor: "pointer",
+  fontWeight: "bold"
+};
 const table = { width: "100%", borderCollapse: "collapse" };
-const th = { textAlign: "left", padding: 15, fontWeight: "bold", fontSize: 13, color: "#64748b", textTransform: "uppercase" };
+const th = {
+  textAlign: "left",
+  padding: 15,
+  fontWeight: "bold",
+  fontSize: 13,
+  color: "#64748b",
+  textTransform: "uppercase"
+};
 const td = { padding: 15, fontSize: 14 };
-const btnDel = { background: "#e74c3c", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
-const btnPage = (disabled) => ({ padding: "8px 16px", background: disabled ? "#e2e8f0" : "#1e88e5", color: disabled ? "#94a3b8" : "#fff", border: "none", borderRadius: 6, cursor: disabled ? "not-allowed" : "pointer", fontWeight: "bold" });
+const btnDel = {
+  background: "#e74c3c",
+  color: "#fff",
+  border: "none",
+  padding: "6px 10px",
+  borderRadius: 6,
+  cursor: "pointer",
+  fontWeight: "bold"
+};
+const btnPage = (disabled) => ({
+  padding: "8px 16px",
+  background: disabled ? "#e2e8f0" : "#1e88e5",
+  color: disabled ? "#94a3b8" : "#fff",
+  border: "none",
+  borderRadius: 6,
+  cursor: disabled ? "not-allowed" : "pointer",
+  fontWeight: "bold"
+});

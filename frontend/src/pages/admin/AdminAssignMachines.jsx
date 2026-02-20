@@ -8,13 +8,14 @@ import {
   query,
   where,
   addDoc,
-  serverTimestamp
+  serverTimestamp,
+  deleteField
 } from "firebase/firestore";
 import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
 
 export default function AdminAssignMachines() {
-  const { user, orgId } = useAdmin(); // 🟢 SECURE: Get orgId
+  const { user, orgId } = useAdmin(); 
   const [refillers, setRefillers] = useState([]);
   const [machines, setMachines] = useState([]);
 
@@ -54,8 +55,9 @@ export default function AdminAssignMachines() {
     return () => unsub();
   }, [orgId]);
 
-  const unassignedMachines = machines.filter((m) => !m.assignedTo);
-  const assignedMachines = machines.filter((m) => m.assignedTo);
+  // 🟢 Updated filters to check for 'refillerId'
+  const unassignedMachines = machines.filter((m) => !m.refillerId);
+  const assignedMachines = machines.filter((m) => m.refillerId);
 
   // ASSIGN MACHINE
   async function assignMachine(machineId, machineName) {
@@ -68,13 +70,15 @@ export default function AdminAssignMachines() {
       setAssigning(true);
       const refiller = refillers.find(r => r.uid === selectedRefiller);
 
+      // 🟢 FIXED: Using 'refillerId' to match the Refiller Dashboard query
       await updateDoc(doc(db, "machines", machineId), {
-        assignedTo: selectedRefiller,
+        refillerId: selectedRefiller,
         assignedEmail: refiller?.email || "",
-        assignedAt: serverTimestamp()
+        assignedAt: serverTimestamp(),
+        assignedTo: selectedRefiller // Kept for legacy support, but refillerId is the primary
       });
 
-      // 🟢 Audit Log
+      // Audit Log
       await addDoc(collection(db, "admin_actions"), {
         actionType: "machine_assigned",
         machineId,
@@ -98,13 +102,15 @@ export default function AdminAssignMachines() {
   async function unassignMachine(machineId, machineName, currentRefillerUid) {
     if(!window.confirm(`Unassign this machine?`)) return;
     try {
+      // 🟢 FIXED: Clearing 'refillerId'
       await updateDoc(doc(db, "machines", machineId), {
+        refillerId: null,
         assignedTo: null,
         assignedEmail: null,
         assignedAt: serverTimestamp()
       });
 
-      // 🟢 Audit Log
+      // Audit Log
       await addDoc(collection(db, "admin_actions"), {
         actionType: "machine_unassigned",
         machineId,
@@ -125,7 +131,6 @@ export default function AdminAssignMachines() {
     <div style={{ padding: 24 }}>
       <h1 style={{ marginBottom: 20 }}>Assign Route (Machines)</h1>
 
-      {/* SELECT REFILLER */}
       <div style={card}>
         <label style={{ fontWeight: 600, fontSize: 16, display: "block", marginBottom: 10 }}>
           1. Select a Refiller
@@ -183,18 +188,18 @@ export default function AdminAssignMachines() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {assignedMachines.map((m) => {
-                    const assignedUser = refillers.find(r => r.uid === m.assignedTo);
+                    const assignedUser = refillers.find(r => r.uid === m.refillerId);
                     return (
                         <div key={m.id} style={machineCard}>
                             <div>
                                 <div style={{ fontWeight: "bold", fontSize: 15 }}>{m.name || m.id}</div>
                                 <div style={{ fontSize: 13, color: "#1976d2", fontWeight: "bold", marginTop: 4 }}>
-                                    👤 {assignedUser?.displayName || m.assignedEmail || m.assignedTo}
+                                    👤 {assignedUser?.displayName || m.assignedEmail || "Assigned"}
                                 </div>
                             </div>
                             <button
                                 style={btnDanger}
-                                onClick={() => unassignMachine(m.id, m.name, m.assignedTo)}
+                                onClick={() => unassignMachine(m.id, m.name, m.refillerId)}
                             >
                                 Unassign
                             </button>
@@ -203,7 +208,6 @@ export default function AdminAssignMachines() {
                 })}
             </div>
         </div>
-
       </div>
     </div>
   );

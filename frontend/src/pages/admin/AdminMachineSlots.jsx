@@ -10,20 +10,22 @@ import {
   serverTimestamp,
   deleteDoc,
   addDoc,
+  query,
+  where
 } from "firebase/firestore";
 import { db } from "../../firebaseClient";
-import { useAdmin } from "../../contexts/AdminContext"; // 🟢 SECURE
-
-console.log("ACTIVE SLOT PAGE VERSION = FINAL BASE SECURE");
+import { useAdmin } from "../../contexts/AdminContext";
+// 🟢 IMPORT THE PDF GENERATOR
+import { generateMachineSlotPDF } from "../../utils/pdfGenerator"; 
 
 export default function AdminMachineSlots() {
   const { machineId } = useParams();
   const nav = useNavigate();
-  const { orgId } = useAdmin(); // 🟢 SECURE
+  const { orgId } = useAdmin();
 
   const [machine, setMachine] = useState(null);
   const [slots, setSlots] = useState([]);
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState([]); // Stores Master Catalog items
   const [loading, setLoading] = useState(true);
 
   const [editingSlot, setEditingSlot] = useState(null);
@@ -41,19 +43,27 @@ export default function AdminMachineSlots() {
       // 1) Load & Verify Machine Ownership
       const m = await getDoc(doc(db, "machines", machineId));
       if (!m.exists() || m.data().orgId !== orgId) {
-          alert("Access Denied: Machine not found or does not belong to your organization.");
+          alert("Access Denied: Machine not found or belongs to another organization.");
           nav("/admin/machines");
           return;
       }
       setMachine({ id: m.id, ...m.data() });
 
-      // 2) slots
+      // 2) Load slots
       const snapSlots = await getDocs(collection(db, "machines", machineId, "slots"));
       setSlots(snapSlots.docs.map((d) => ({ id: d.id, ...d.data() })));
 
-      // 3) products (Assuming products are global for now)
-      const snapProducts = await getDocs(collection(db, "products"));
-      setProducts(snapProducts.docs.map((d) => ({ id: d.id, ...d.data() })));
+      // 3) Load Master Catalog
+      const masterQ = query(
+        collection(db, "master_products"), 
+        where("orgId", "==", orgId)
+      );
+      const snapMaster = await getDocs(masterQ);
+      const masterList = snapMaster.docs.map((d) => ({ id: d.id, ...d.data() }));
+      
+      masterList.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      setProducts(masterList);
+
     } catch (e) {
       console.error("Failed to load machine/slots", e);
     } finally {
@@ -61,7 +71,7 @@ export default function AdminMachineSlots() {
     }
   }
 
-  // ... [KEEP ALL YOUR EXISTING HELPER FUNCTIONS EXACTLY THE SAME] ...
+  // --- HELPER FUNCTIONS ---
   function traysFromSlots() {
     const set = new Set();
     slots.forEach((s) => { if (s.tray != null) set.add(s.tray); });
@@ -91,7 +101,8 @@ export default function AdminMachineSlots() {
   }
 
   function labelForProduct(p) {
-    return p.name ? `${p.name} ${p.sku ? `(${p.sku})` : ''}` : "Unnamed";
+    const skuPart = p.sku ? `[${p.sku}] ` : "";
+    return `${skuPart}${p.name || "Unnamed Product"}`;
   }
 
   function getSelectedProductId(slot) {
@@ -102,6 +113,12 @@ export default function AdminMachineSlots() {
     }
     return "";
   }
+
+  // 🟢 PDF DOWNLOAD ACTION
+  const downloadSlotAudit = () => {
+    if (!machine || slots.length === 0) return alert("No data to download");
+    generateMachineSlotPDF(machine, slots);
+  };
 
   function openSlotEditor(slot) {
     setEditingSlot({
@@ -122,21 +139,18 @@ export default function AdminMachineSlots() {
     } : prev);
   }
 
-  // --- ACTIONS --- 
-  // (These are exactly your logic, just kept safe inside the component)
-
   async function saveEditingSlot() {
     if (!editingSlot) return;
     setSavingSlot(true);
     try {
-      const { id, tray, slot_number, capacity, current_qty, product_id } = editingSlot;
+      const { id, capacity, current_qty, product_id } = editingSlot;
       const product = products.find((p) => p.id === product_id);
 
       await updateDoc(doc(db, "machines", machineId, "slots", id), {
         capacity: Number(capacity) || 0,
         current_qty: Number(current_qty) || 0,
-        product_id: product ? product.id : product_id || null,
-        product_name: product ? product.name : editingSlot.product_name || "",
+        product_id: product ? product.id : null,
+        product_name: product ? product.name : "",
         updatedAt: serverTimestamp(),
       });
       await loadAll();
@@ -144,6 +158,7 @@ export default function AdminMachineSlots() {
     } catch (e) { alert("Error updating slot"); } finally { setSavingSlot(false); }
   }
 
+  // --- SLOT GENERATION ACTIONS ---
   async function deleteAllSlots(skipConfirm = false) {
     if (!skipConfirm && !window.confirm("Delete ALL slots?")) return;
     const snap = await getDocs(collection(db, "machines", machineId, "slots"));
@@ -173,35 +188,6 @@ export default function AdminMachineSlots() {
       await Promise.all(tasks);
       await loadAll();
     } catch (e) { alert("Error regenerating slots."); }
-  }
-
-  async function renumberTray(trayNumber) {
-    const snap = await getDocs(collection(db, "machines", machineId, "slots"));
-    const traySlots = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((s) => s.tray === trayNumber).sort((a, b) => (a.slot_number || 0) - (b.slot_number || 0));
-    let next = 1;
-    const updates = [];
-    for (const s of traySlots) {
-      if (s.slot_number !== next) updates.push(updateDoc(doc(db, "machines", machineId, "slots", s.id), { slot_number: next }));
-      next++;
-    }
-    if (updates.length) await Promise.all(updates);
-  }
-
-  async function deleteSingleSlot(slot) {
-    if (!window.confirm("Delete slot permanently?")) return;
-    await deleteDoc(doc(db, "machines", machineId, "slots", slot.id));
-    await renumberTray(slot.tray);
-    await loadAll();
-    closeSlotEditor();
-  }
-
-  async function handleAddSlot(tray) {
-    const maxSlotNumber = slots.filter((s) => s.tray === tray).reduce((max, s) => Math.max(max, Number(s.slot_number) || 0), 0);
-    if (maxSlotNumber >= 10) return alert("Max 10 slots per tray.");
-    await addDoc(collection(db, "machines", machineId, "slots"), {
-      tray, slot_number: maxSlotNumber + 1, capacity: 10, current_qty: 0, product_id: null, product_name: "", merged_into: null
-    });
-    await loadAll();
   }
 
   async function handleMergeRight() {
@@ -238,20 +224,20 @@ export default function AdminMachineSlots() {
     } finally { setMergeBusy(false); }
   }
 
-  // --- RENDER ---
-  if (loading || !machine) return <div style={{ padding: 24 }}>Loading slots...</div>;
+  if (loading || !machine) return <div style={{ padding: 24 }}>Loading machine configuration...</div>;
   const trays = traysFromSlots();
 
-  // Return your exact JSX below (no visual changes, just secure data)
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <button onClick={() => nav(-1)} style={btnBack}>← Back</button>
         <div style={{ textAlign: "center" }}>
-          <h2 style={{ margin: 0 }}>Configure Slots – {machine.id}</h2>
+          <h2 style={{ margin: 0 }}>Configure Slots – {machine.name || machine.id}</h2>
           <div style={{ display: "flex", justifyContent: "center", gap: 12, margin: "10px 0" }}>
             <button style={btnRed} onClick={() => deleteAllSlots(false)}>Delete All Slots</button>
             <button style={btnBlue} onClick={regenerateSlotsPrompt}>Regenerate Grid</button>
+            {/* 🟢 DOWNLOAD BUTTON */}
+            <button style={btnGreen} onClick={downloadSlotAudit}>📥 Download Slot Data</button>
           </div>
         </div>
         <div style={{ textAlign: "right", fontSize: 13, background: "#fff", padding: 10, borderRadius: 8, border: "1px solid #eee" }}>
@@ -261,7 +247,7 @@ export default function AdminMachineSlots() {
       </div>
 
       {trays.length === 0 ? (
-        <div style={card}><p>No slots found. Generate a grid.</p></div>
+        <div style={card}><p>No slots found. Please regenerate the grid.</p></div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {trays.map((tray) => {
@@ -283,7 +269,7 @@ export default function AdminMachineSlots() {
                         <div style={{ fontSize: 12, color: slot.product_name ? "#222" : "#999", fontWeight: slot.product_name ? 600 : 400, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: 80 }}>
                           {slot.product_name || "Empty"}
                         </div>
-                        <div style={{ fontSize: 11, color: "#666", marginTop: 4, display: "flex", justifyContent: "space-between" }}>
+                        <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, display: "flex", justifyContent: "space-between" }}>
                           <span>{slot.current_qty ?? 0}/{slot.capacity ?? 0}</span>
                           {isMerged && <span style={{color:"#3b82f6"}}>🔗</span>}
                         </div>
@@ -303,14 +289,14 @@ export default function AdminMachineSlots() {
           <div style={modalBox}>
             <h3 style={{ marginTop: 0 }}>Edit Slot {displayCodeRange(editingSlot)}</h3>
             <div style={field}>
-              <label>Product</label>
+              <label style={{fontWeight: 'bold', fontSize: 13, marginBottom: 5}}>Product (from Master Catalog)</label>
               <select style={inputSelect} value={editingSlot.product_id || ""} onChange={(e) => handleEditingFieldChange("product_id", e.target.value)}>
                 <option value="">-- Empty slot --</option>
                 {products.map((p) => <option key={p.id} value={p.id}>{labelForProduct(p)}</option>)}
               </select>
             </div>
-            <div style={field}><label>Capacity</label><input type="number" style={inputNumber} value={editingSlot.capacity} onChange={(e) => handleEditingFieldChange("capacity", e.target.value)} /></div>
-            <div style={field}><label>Current Qty</label><input type="number" style={inputNumber} value={editingSlot.current_qty} onChange={(e) => handleEditingFieldChange("current_qty", e.target.value)} /></div>
+            <div style={field}><label style={{fontWeight: 'bold', fontSize: 13, marginBottom: 5}}>Capacity</label><input type="number" style={inputNumber} value={editingSlot.capacity} onChange={(e) => handleEditingFieldChange("capacity", e.target.value)} /></div>
+            <div style={field}><label style={{fontWeight: 'bold', fontSize: 13, marginBottom: 5}}>Current Qty</label><input type="number" style={inputNumber} value={editingSlot.current_qty} onChange={(e) => handleEditingFieldChange("current_qty", e.target.value)} /></div>
             
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20 }}>
               <div style={{ display: "flex", gap: 8 }}>
@@ -319,7 +305,6 @@ export default function AdminMachineSlots() {
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button type="button" onClick={closeSlotEditor} style={btnCancel}>Cancel</button>
-                <button type="button" onClick={() => deleteSingleSlot(editingSlot)} style={btnDanger}>Delete</button>
                 <button type="button" onClick={saveEditingSlot} style={btnSave}>Save</button>
               </div>
             </div>
@@ -341,6 +326,7 @@ const slotCodeText = { fontWeight: 800, fontSize: 16, color: "#0f172a", marginBo
 const btnBack = { padding: "8px 16px", border: "none", borderRadius: 8, background: "#f1f5f9", color: "#475569", cursor: "pointer", fontWeight: "bold" };
 const btnRed = { padding: "8px 16px", background: "#fee2e2", color: "#ef4444", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" };
 const btnBlue = { padding: "8px 16px", background: "#e0f2fe", color: "#3b82f6", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" };
+const btnGreen = { padding: "8px 16px", background: "#10b981", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }; // 🟢 NEW STYLE
 const btnTinyAdd = { padding: "6px 10px", fontSize: 12, borderRadius: 6, border: "1px dashed #cbd5e1", background: "#fff", color: "#64748b", cursor: "pointer", fontWeight: "bold" };
 
 // Modal Styles
@@ -351,5 +337,4 @@ const inputSelect = { width: "100%", padding: "10px", borderRadius: 8, border: "
 const inputNumber = { width: "100%", padding: "10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 14 };
 const btnCancel = { padding: "8px 16px", background: "#f1f5f9", border: "none", borderRadius: 8, color: "#64748b", cursor: "pointer", fontWeight: "bold" };
 const btnSave = { padding: "8px 16px", background: "#10b981", border: "none", borderRadius: 8, color: "#fff", cursor: "pointer", fontWeight: "bold" };
-const btnDanger = { padding: "8px 16px", background: "#ef4444", border: "none", borderRadius: 8, color: "#fff", cursor: "pointer", fontWeight: "bold" };
 const btnTinyGhost = { padding: "6px 10px", fontSize: 12, borderRadius: 6, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#475569", cursor: "pointer", fontWeight: "bold" };

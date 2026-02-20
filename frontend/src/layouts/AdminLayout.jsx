@@ -53,13 +53,14 @@ export default function AdminLayout() {
     <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#f4f7f6" }}>
       {/* LEFT SIDEBAR */}
       <div style={sidebarStyle}>
-        <div style={{ marginBottom: 30, padding: "0 10px" }}>
+        <div style={{ marginBottom: 20, padding: "0 10px" }}>
           <h2 style={{ color: "#0bc3ff", margin: "0 0 5px 0", letterSpacing: 1 }}>ADMIN PANEL</h2>
           <div style={{ fontSize: 12, color: "#90caf9", wordBreak: "break-all" }}>{user?.email}</div>
           <div style={{ fontSize: 11, color: "#777", marginTop: 4, fontFamily: "monospace" }}>ORG: {orgId}</div>
         </div>
 
-        <nav style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {/* 🟢 FIXED SCROLLING ISSUE HERE */}
+        <nav style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, overflowY: "auto", paddingRight: 5, marginBottom: 20 }}>
           <NavLink to="/admin" label="Dashboard" icon="📊" />
           <NavLink to="/admin/issues" label="Machine Issues" icon="🚨" />
           
@@ -69,7 +70,19 @@ export default function AdminLayout() {
             <NavLink to="/admin/machines/assign" label="Assign Route" icon="📍" />
           </div>
 
-          <NavLink to="/admin/products" label="Products" icon="🍫" />
+          <div style={{ margin: "10px 0" }}>
+            <div style={{ color: "#777", fontSize: 11, padding: "0 12px", textTransform: "uppercase", letterSpacing: 1, marginBottom: 5 }}>Warehouse Ops</div>
+            <NavLink to="/admin/warehouse/dashboard" label="Dashboard" icon="📈" />
+            <NavLink to="/admin/warehouse/master-products" label="Master Catalog" icon="📖" /> 
+            <NavLink to="/admin/warehouse/inward" label="Inward Stock" icon="📥" />
+            <NavLink to="/admin/warehouse/outward" label="Manual Outward" icon="📤" />
+            <NavLink to="/admin/warehouse/returns" label="Manual Returns" icon="🔄" /> {/* 🟢 NEW */}
+            <NavLink to="/admin/warehouse/expired" label="Manual Expiry" icon="⚠️" /> {/* 🟢 NEW */}
+            <NavLink to="/admin/warehouse/kits" label="Issue Kits" icon="📦" /> 
+            <NavLink to="/admin/warehouse/movements" label="Stock Ledger" icon="📋" />
+          </div>
+
+          <NavLink to="/admin/products" label="Active Products" icon="🍫" />
           <NavLink to="/admin/refill-logs" label="Refill Logs" icon="📦" />
           <NavLink to="/admin/audit-logs" label="Audit Logs" icon="📋" />
           <NavLink to="/admin/users" label="Team (Refillers)" icon="👔" />
@@ -103,8 +116,8 @@ export default function AdminLayout() {
 /* ───────── STYLES ───────── */
 const sidebarStyle = {
   width: 260,
-  minWidth: 260, // 🟢 Forces exact width
-  flexShrink: 0, // 🟢 Prevents Flexbox from shrinking the sidebar
+  minWidth: 260,
+  flexShrink: 0,
   background: "#111",
   color: "#fff",
   padding: "30px 12px",
@@ -115,5 +128,5 @@ const sidebarStyle = {
 };
 
 const linkStyle = { textDecoration: "none", padding: "12px 16px", borderRadius: "0 8px 8px 0", fontWeight: 600, transition: "all 0.2s ease", display: "flex", alignItems: "center", fontSize: 14 };
-const logoutStyle = { marginTop: "auto", padding: "12px", background: "rgba(229, 57, 53, 0.1)", border: "1px solid rgba(229, 57, 53, 0.3)", color: "#ef5350", borderRadius: 8, fontWeight: "bold", cursor: "pointer", width: "100%", transition: "all 0.2s ease" };
+const logoutStyle = { padding: "12px", background: "rgba(229, 57, 53, 0.1)", border: "1px solid rgba(229, 57, 53, 0.3)", color: "#ef5350", borderRadius: 8, fontWeight: "bold", cursor: "pointer", width: "100%", transition: "all 0.2s ease", flexShrink: 0 };
 const suspendedBanner = { background: "#fff1f2", color: "#be123c", padding: "16px 24px", borderBottom: "2px solid #fda4af", display: "flex", alignItems: "center", gap: 15, fontWeight: 500, position: "sticky", top: 0, zIndex: 100 };

@@ -25,6 +25,17 @@ import AdminAssignMachines from "./pages/admin/AdminAssignMachines";
 import AdminMachineSlots from "./pages/admin/AdminMachineSlots";
 import AdminMachineIssues from "./pages/admin/AdminMachineIssues"; 
 
+// 🟢 NEW WAREHOUSE ROUTES
+import WarehouseDashboard from "./pages/admin/WarehouseDashboard";
+import WarehouseInward from "./pages/admin/WarehouseInward";
+import WarehouseOutward from "./pages/admin/WarehouseOutward";
+import WarehouseLedger from "./pages/admin/WarehouseLedger"; 
+import AdminKits from "./pages/admin/AdminKits";
+import AdminMasterProducts from "./pages/admin/AdminMasterProducts";
+import WarehouseReturns from "./pages/admin/WarehouseReturns";
+import WarehouseExpired from "./pages/admin/WarehouseExpired";
+
+
 /* ───────── REFILLER ───────── */
 import RefillerLayout from "./layouts/RefillerLayout";
 import RefillerDashboard from "./pages/refiller/RefillerDashboard"; 
@@ -123,6 +134,17 @@ function AppRoutes() {
         <Route path="machines" element={<AdminMachines />} />
         <Route path="machines/assign" element={<AdminAssignMachines />} />
         <Route path="machines/:machineId/slots" element={<AdminMachineSlots />} />
+        
+        {/* 🟢 WAREHOUSE ROUTES */}
+        <Route path="warehouse/dashboard" element={<WarehouseDashboard />} />
+        <Route path="warehouse/master-products" element={<AdminMasterProducts />} /> {/* 🟢 ADDED */}
+        <Route path="warehouse/inward" element={<WarehouseInward />} />
+        <Route path="warehouse/outward" element={<WarehouseOutward />} />
+        <Route path="warehouse/returns" element={<WarehouseReturns />} />
+        <Route path="warehouse/expired" element={<WarehouseExpired />} />
+        <Route path="warehouse/kits" element={<AdminKits />} /> 
+        <Route path="warehouse/movements" element={<WarehouseLedger />} />
+
         <Route path="products" element={<AdminProducts />} />
         <Route path="refill-logs" element={<AdminRefillLogs />} />
         <Route path="audit-logs" element={<AdminAuditLogs />} />

@@ -21,7 +21,6 @@ export default function AdminKits() {
   const [issuing, setIssuing] = useState(false);
   const [selectedKit, setSelectedKit] = useState(null);
 
-  // 🟢 UPDATED: Real-time visibility of kits using onSnapshot
   useEffect(() => {
     if (!orgId) return;
 
@@ -39,7 +38,6 @@ export default function AdminKits() {
       },
       (err) => {
         console.error("Kits Read Error:", err);
-        // If index error persists, this logs the link again
         setLoading(false);
       }
     );
@@ -156,11 +154,6 @@ export default function AdminKits() {
               ))}
             </tbody>
           </table>
-          {kits.length === 0 && (
-            <div style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>
-              No kits found.
-            </div>
-          )}
         </div>
       )}
 
@@ -179,6 +172,7 @@ export default function AdminKits() {
               <div><b>Refiller:</b> {selectedKit.refillerEmail}</div>
             </div>
 
+            {/* ✅ FIXED PRODUCT TABLE */}
             <div style={{ maxHeight: 350, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead style={{ background: "#f8fafc", position: "sticky", top: 0 }}>
@@ -193,9 +187,9 @@ export default function AdminKits() {
                     <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
                       <td style={tdModal}><b>{p.slotId}</b></td>
                       <td style={tdModal}>
-                        {p.name}
+                        {p.name || "Unknown Product"}
                         {p.swapped && (
-                          <span style={{ color: "#0ea5e9", fontSize: 11, marginLeft: 5 }}>
+                          <span style={{ color: "#3b82f6", fontSize: 11, marginLeft: 5 }}>
                             *(Swapped)
                           </span>
                         )}

@@ -44,8 +44,12 @@ export default function SuperAdminLayout() {
       {/* SIDEBAR */}
       <aside style={sidebarStyle}>
         <div style={{ marginBottom: 30, padding: "0 10px" }}>
-          <h2 style={{ color: "#4fc3f7", margin: "0 0 5px 0", letterSpacing: 1 }}>SUPER ADMIN</h2>
-          <div style={{ fontSize: 12, color: "#90caf9", wordBreak: "break-all" }}>{user?.email}</div>
+          <h2 style={{ color: "#4fc3f7", margin: "0 0 5px 0", letterSpacing: 1 }}>
+            SUPER ADMIN
+          </h2>
+          <div style={{ fontSize: 12, color: "#90caf9", wordBreak: "break-all" }}>
+            {user?.email}
+          </div>
         </div>
 
         <nav style={navStyle}>
@@ -56,6 +60,23 @@ export default function SuperAdminLayout() {
           <NavLink to="/super/machines" label="Machines" icon="🤖" />
           <NavLink to="/super/issues" label="Issues" icon="🚨" />
           <NavLink to="/super/audit" label="Audit Logs" icon="📋" />
+
+          {/* 🟢 SECURITY SECTION */}
+          <div
+            style={{
+              margin: "15px 0 5px 0",
+              color: "#607d8b",
+              fontSize: 11,
+              padding: "0 12px",
+              textTransform: "uppercase",
+              letterSpacing: 1
+            }}
+          >
+            Security
+          </div>
+
+          <NavLink to="/super/access-requests" label="Access Requests" icon="🔑" />
+          <NavLink to="/super/change-password" label="Change Password" icon="🔒" />
         </nav>
 
         <button onClick={handleLogout} style={logoutStyle}>
@@ -64,20 +85,28 @@ export default function SuperAdminLayout() {
       </aside>
 
       {/* MAIN CONTENT */}
-      {/* 🟢 Added overflowX: "auto" so wide tables scroll instead of pushing sidebar */}
-      <main style={{ flex: 1, overflowY: "auto", overflowX: "auto", height: "100vh", padding: 24, boxSizing: "border-box" }}>
+      <main
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          overflowX: "auto",
+          height: "100vh",
+          padding: 24,
+          boxSizing: "border-box"
+        }}
+      >
         <Outlet />
       </main>
     </div>
   );
 }
 
-// --- Styles ---
+/* ─── Styles ─── */
 
 const sidebarStyle = {
   width: 260,
-  minWidth: 260, // 🟢 Forces exact width
-  flexShrink: 0, // 🟢 Prevents Flexbox from shrinking the sidebar
+  minWidth: 260,
+  flexShrink: 0,
   background: "linear-gradient(180deg,#0b1c2d,#0f2f4a)",
   color: "#fff",
   padding: "30px 16px",
@@ -90,7 +119,7 @@ const sidebarStyle = {
 const navStyle = {
   display: "flex",
   flexDirection: "column",
-  gap: 6,
+  gap: 6
 };
 
 const linkStyle = {
@@ -114,5 +143,5 @@ const logoutStyle = {
   fontWeight: "bold",
   cursor: "pointer",
   width: "100%",
-  transition: "all 0.2s ease",
+  transition: "all 0.2s ease"
 };

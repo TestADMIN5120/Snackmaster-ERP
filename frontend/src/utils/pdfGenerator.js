@@ -40,6 +40,7 @@ export function generateKitPDF(kit) {
   doc.text(`Refiller: ${kit.refillerEmail}`, 120, 56);
   doc.text(`Org ID: ${kit.orgId}`, 120, 62);
 
+  // 🟢 FIXED: Using p.name ensures product identity in the PDF
   const tableData = kit.products.map((p) => [
     p.slotId,
     p.name + (p.swapped ? " (Swapped)" : ""),
@@ -211,7 +212,7 @@ export function generateBulkReportPDF(title, columns, dataRows, orgId) {
 }
 
 /* ──────────────────────────────────────────────
-   🟢 NEW: MACHINE SLOT AUDIT PDF
+   🟢 MACHINE SLOT AUDIT PDF
 ────────────────────────────────────────────── */
 export function generateMachineSlotPDF(machine, slots) {
   const doc = new jsPDF();

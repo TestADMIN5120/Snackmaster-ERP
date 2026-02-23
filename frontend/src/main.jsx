@@ -12,6 +12,8 @@ import { AdminProvider, useAdmin } from "./contexts/AdminContext";
 
 /* ───────── AUTH PAGES ───────── */
 import Login from "./pages/Login";
+// 🟢 FIXED PATH: Now points exactly to where you saved the file
+import ChangePassword from "./pages/admin/auth/ChangePassword"; 
 
 /* ───────── ADMIN ───────── */
 import AdminLayout from "./layouts/AdminLayout";
@@ -24,8 +26,10 @@ import AdminUsers from "./pages/admin/AdminUsers";
 import AdminAssignMachines from "./pages/admin/AdminAssignMachines";
 import AdminMachineSlots from "./pages/admin/AdminMachineSlots";
 import AdminMachineIssues from "./pages/admin/AdminMachineIssues"; 
+// 🟢 FIXED PATH: Confirmed location for AccessRequests
+import AccessRequests from "./pages/admin/AccessRequests"; 
 
-// 🟢 NEW WAREHOUSE ROUTES
+// 🟢 WAREHOUSE ROUTES
 import WarehouseDashboard from "./pages/admin/WarehouseDashboard";
 import WarehouseInward from "./pages/admin/WarehouseInward";
 import WarehouseOutward from "./pages/admin/WarehouseOutward";
@@ -34,7 +38,6 @@ import AdminKits from "./pages/admin/AdminKits";
 import AdminMasterProducts from "./pages/admin/AdminMasterProducts";
 import WarehouseReturns from "./pages/admin/WarehouseReturns";
 import WarehouseExpired from "./pages/admin/WarehouseExpired";
-
 
 /* ───────── REFILLER ───────── */
 import RefillerLayout from "./layouts/RefillerLayout";
@@ -111,6 +114,7 @@ function AppRoutes() {
         <Route path="machines/:machineId/report-issue" element={<RefillerReportIssue />} />
         <Route path="machines/:machineId/make-kit" element={<RefillerMakeKit />} /> 
         <Route path="history" element={<RefillerHistory />} />
+        <Route path="change-password" element={<ChangePassword />} /> 
       </Route>
 
       {/* ───────── SUPER ADMIN ───────── */}
@@ -125,6 +129,8 @@ function AppRoutes() {
         <Route path="machines/create" element={<SuperAdminMachineCreate />} />
         <Route path="audit" element={<SuperAdminAuditLogs />} />
         <Route path="issues" element={<SuperAdminIssues />} />
+        <Route path="access-requests" element={<AccessRequests />} /> 
+        <Route path="change-password" element={<ChangePassword />} /> 
       </Route>
 
       {/* ───────── ADMIN ───────── */}
@@ -137,7 +143,7 @@ function AppRoutes() {
         
         {/* 🟢 WAREHOUSE ROUTES */}
         <Route path="warehouse/dashboard" element={<WarehouseDashboard />} />
-        <Route path="warehouse/master-products" element={<AdminMasterProducts />} /> {/* 🟢 ADDED */}
+        <Route path="warehouse/master-products" element={<AdminMasterProducts />} /> 
         <Route path="warehouse/inward" element={<WarehouseInward />} />
         <Route path="warehouse/outward" element={<WarehouseOutward />} />
         <Route path="warehouse/returns" element={<WarehouseReturns />} />
@@ -149,6 +155,8 @@ function AppRoutes() {
         <Route path="refill-logs" element={<AdminRefillLogs />} />
         <Route path="audit-logs" element={<AdminAuditLogs />} />
         <Route path="users" element={<AdminUsers />} />
+        <Route path="access-requests" element={<AccessRequests />} /> 
+        <Route path="change-password" element={<ChangePassword />} /> 
       </Route>
       
       {/* ───────── FALLBACK ───────── */}

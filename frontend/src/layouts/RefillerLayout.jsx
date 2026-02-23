@@ -50,6 +50,15 @@ export default function RefillerLayout() {
           <div style={{ fontSize: 24, marginBottom: 4 }}>🕒</div>
           <span style={{ fontSize: 12, fontWeight: "bold" }}>History</span>
         </Link>
+
+        {/* 🟢 NEW: Password Change / Settings Link */}
+        <Link 
+          to="/refiller/change-password" 
+          style={{...navItem, color: isActive("/refiller/change-password") ? "#1e88e5" : "#64748b"}}
+        >
+          <div style={{ fontSize: 24, marginBottom: 4 }}>🔑</div>
+          <span style={{ fontSize: 12, fontWeight: "bold" }}>Security</span>
+        </Link>
       </nav>
     </div>
   );

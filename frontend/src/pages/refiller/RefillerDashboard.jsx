@@ -66,7 +66,7 @@ export default function RefillerDashboard() {
     return `${days}d ago`;
   }
 
-  // 🧠 Helper: Map Status to Strict UI Rules (UPDATED)
+  // 🧠 Helper: Map Status to Strict UI Rules
   function getMachineConfig(status) {
     switch (status) {
       case "active":
@@ -83,7 +83,6 @@ export default function RefillerDashboard() {
         };
 
       case "refill_in_progress":
-        // 🟢 FIXED: Button enabled to resume refill
         return { 
           badgeBg: "#dbeafe", badgeCol: "#1e40af", badgeText: "🔵 Refill In Progress", 
           btnBg: "#3b82f6", btnText: "🚀 Resume Refill", disabled: false 
@@ -131,23 +130,42 @@ export default function RefillerDashboard() {
         </div>
       </div>
 
-      {/* 🟢 HEADER WITH HISTORY BUTTON */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+      {/* 🟢 HEADER WITH TOP ACTION BUTTONS */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: 20 }}>
         <h1 style={{ margin: 0, color: "#333" }}>My Route</h1>
-        <button
-          onClick={() => navigate("/refiller/history")}
-          style={{
-            padding: "10px 16px",
-            background: "#546e7a",
-            color: "white",
-            border: "none",
-            borderRadius: 6,
-            cursor: "pointer",
-            fontWeight: "bold"
-          }}
-        >
-          📜 View History
-        </button>
+        <div style={{ display: "flex", gap: "10px" }}>
+          
+          {/* 🟢 NEW VISIBLE PASSWORD BUTTON */}
+          <button
+            onClick={() => navigate("/refiller/change-password")}
+            style={{
+              padding: "10px 16px",
+              background: "#0ea5e9",
+              color: "white",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontWeight: "bold"
+            }}
+          >
+            🔑 Security
+          </button>
+
+          <button
+            onClick={() => navigate("/refiller/history")}
+            style={{
+              padding: "10px 16px",
+              background: "#546e7a",
+              color: "white",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontWeight: "bold"
+            }}
+          >
+            📜 History
+          </button>
+        </div>
       </div>
 
       {loading && <p>Loading machines...</p>}

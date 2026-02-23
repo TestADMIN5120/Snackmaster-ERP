@@ -9,26 +9,19 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../../firebaseClient";
-import { useAdmin } from "../../contexts/AdminContext"; // 🟢 Need to import Context
+import { useAdmin } from "../../contexts/AdminContext"; 
 
 export default function AdminMachineIssues() {
-  console.log("🔥 AdminMachineIssues MOUNTED");
-
-  const { orgId, user } = useAdmin(); // 🟢 Get Admin Data
+  const { orgId, user } = useAdmin(); 
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!orgId) return;
 
-    // 🟢 SECURE QUERY: Only load issues for this Admin's Org
-    const q = query(
-      collection(db, "machine_issues"),
-      where("orgId", "==", orgId)
-    );
+    const q = query(collection(db, "machine_issues"), where("orgId", "==", orgId));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      // 🟢 Sort in JS to avoid needing a Firebase Index right now
       const data = snapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
         .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
@@ -40,30 +33,23 @@ export default function AdminMachineIssues() {
     return () => unsubscribe();
   }, [orgId]);
 
-  // 🟢 NEW ISSUE WORKFLOW LOGIC
   async function updateIssueStatus(issueId, machineId, newStatus) {
     if (!window.confirm(`Update status to: ${newStatus.replace("_", " ").toUpperCase()}?`)) return;
 
     try {
-      const updateData = {
-        status: newStatus,
-        updatedAt: serverTimestamp(),
-      };
+      const updateData = { status: newStatus, updatedAt: serverTimestamp() };
 
-      // Add Audit Timestamps
       if (newStatus === "acknowledged") updateData.acknowledgedAt = serverTimestamp();
       if (newStatus === "resolved") {
         updateData.resolvedAt = serverTimestamp();
-        updateData.resolvedBy = user.email; // Track who fixed it
+        updateData.resolvedBy = user.email; 
       }
 
-      // 1. Update the Issue Document
       await updateDoc(doc(db, "machine_issues", issueId), updateData);
 
-      // 2. If Resolved, Reactivate the Machine
       if (newStatus === "resolved") {
         await updateDoc(doc(db, "machines", machineId), {
-          status: "active", // Machine is back online
+          status: "active",
           updatedAt: serverTimestamp(),
         });
       }
@@ -74,9 +60,7 @@ export default function AdminMachineIssues() {
     }
   }
 
-  if (loading) {
-    return <div style={{ padding: 24 }}>Loading issues...</div>;
-  }
+  if (loading) return <div style={{ padding: 24 }}>Loading issues...</div>;
 
   return (
     <div style={{ padding: 24 }}>
@@ -93,11 +77,13 @@ export default function AdminMachineIssues() {
         <div key={issue.id} style={card}>
           <div style={cardHeader}>
             <div>
-                <h3 style={{ margin: "0 0 5px 0" }}>Machine: {issue.machineId}</h3>
+                {/* 🟢 NEW: Shows the machine name provided by Refiller payload */}
+                <h3 style={{ margin: "0 0 5px 0" }}>{issue.machineName || "Unknown Machine"}</h3>
+                <div style={{ fontSize: 12, color: "#666", marginBottom: 5 }}>ID: {issue.machineId}</div>
                 <span style={{ fontSize: 12, color: "#666" }}>
                     Reported: {issue.createdAt?.toDate ? issue.createdAt.toDate().toLocaleString() : "Just now"}
                 </span>
-                {/* 🟢 Offline Sync Badge */}
+                
                 {issue.offline && (
                   <span style={{marginLeft: 10, fontSize: 11, background: "#ffeb3b", color:"#000", padding: "2px 6px", borderRadius: 4, fontWeight: "bold"}}>
                     📴 Offline Sync
@@ -118,7 +104,6 @@ export default function AdminMachineIssues() {
           </div>
 
           <div style={cardFooter}>
-            {/* 🟢 DYNAMIC WORKFLOW BUTTONS */}
             {(issue.status === "reported" || issue.status === "open") && (
               <button onClick={() => updateIssueStatus(issue.id, issue.machineId, "acknowledged")} style={btnBlue}>
                 👀 Acknowledge
@@ -150,7 +135,6 @@ export default function AdminMachineIssues() {
 }
 
 /* ───────── UI Styles ───────── */
-
 const card = { background: "#fff", marginBottom: 20, borderRadius: 10, boxShadow: "0 2px 8px rgba(0,0,0,.08)", overflow: "hidden", border: "1px solid #eee" };
 const cardHeader = { padding: "15px 20px", background: "#f8f9fa", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" };
 const cardBody = { padding: "20px", fontSize: "14px", lineHeight: "1.6" };

@@ -28,7 +28,6 @@ export default function RefillerReportIssue() {
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   
-  // 🟢 Post-Submission Success State
   const [successData, setSuccessData] = useState(null);
 
   useEffect(() => {
@@ -58,9 +57,10 @@ export default function RefillerReportIssue() {
       const newIssueRef = doc(collection(db, "machine_issues"));
       const machineRef = doc(db, "machines", machineId);
 
-      // 1. Create Issue
+      // 1. Create Issue (Now includes Machine Name for Admin UI)
       batch.set(newIssueRef, {
         machineId: machineId,
+        machineName: machine.name || "Unknown Machine", // 🟢 NEW
         orgId: machine.orgId, 
         refillerId: user.uid,
         refillerEmail: user.email,
@@ -73,7 +73,7 @@ export default function RefillerReportIssue() {
         createdAt: serverTimestamp() 
       });
 
-      // 2. Update Machine Status
+      // 2. Update Machine Status to prevent further refills
       batch.update(machineRef, {
         status: "issue_reported",
         lastIssueId: newIssueRef.id,
@@ -83,20 +83,18 @@ export default function RefillerReportIssue() {
 
       await batch.commit();
 
-      // 🟢 Show beautiful success screen instead of alert
       setSuccessData({
         syncStatus: isOffline ? "🟡 Saved locally. Will sync to Admin when online." : "🟢 Synced to Cloud. Admin notified."
       });
 
     } catch (error) {
       console.error("Error reporting issue:", error);
-      alert("Failed to report issue.");
+      alert("Failed to report issue. Check console & Firestore rules.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 🟢 SUCCESS SCREEN UX
   if (successData) {
     return (
       <div style={{ padding: "20px", maxWidth: "600px", margin: "40px auto", textAlign: "center" }}>
@@ -119,7 +117,6 @@ export default function RefillerReportIssue() {
     );
   }
 
-  // 🟢 REPORTING FORM UX
   return (
     <div style={{ padding: 20, maxWidth: 600, margin: "0 auto", paddingBottom: 60 }}>
       <button onClick={() => navigate(-1)} style={backBtn}>
@@ -137,7 +134,6 @@ export default function RefillerReportIssue() {
            </div>
         </div>
 
-        {/* 🟢 TAP-FRIENDLY CATEGORY GRID */}
         <div>
           <label style={label}>What went wrong?</label>
           <div style={gridContainer}>
@@ -191,7 +187,5 @@ const infoBox = { background: "#f8fafc", border: "1px solid #e2e8f0", padding: "
 const backBtn = { background: "none", border: "none", color: "#3182ce", cursor: "pointer", marginBottom: 15, fontSize: 15, fontWeight: "bold", padding: 0 };
 const submitBtn = { padding: "18px", color: "#fff", border: "none", borderRadius: "8px", fontSize: "16px", cursor: "pointer", fontWeight: "bold", marginTop: "10px", boxShadow: "0 4px 6px rgba(220, 38, 38, 0.2)" };
 const btnPrimary = { padding: "15px", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", fontSize: "16px" };
-
-// Grid UI Styles
 const gridContainer = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "10px" };
 const categoryCard = { padding: "15px 10px", borderRadius: "8px", border: "2px solid", textAlign: "center", cursor: "pointer", transition: "all 0.2s", userSelect: "none" };

@@ -1,4 +1,4 @@
- import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
@@ -12,18 +12,11 @@ export default function AdminMachines() {
 
   useEffect(() => {
     if (!orgId) return;
-
-    const q = query(
-      collection(db, "machines"),
-      where("orgId", "==", orgId),
-      where("deleted", "==", false)
-    );
-
+    const q = query(collection(db, "machines"), where("orgId", "==", orgId), where("deleted", "==", false));
     const unsub = onSnapshot(q, (snap) => {
       setMachines(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
     });
-
     return () => unsub();
   }, [orgId]);
 
@@ -31,7 +24,8 @@ export default function AdminMachines() {
     switch (status) {
       case "active": return "#10b981";
       case "issue_reported": return "#ef4444";
-      case "kit_prepared": return "#f59e0b";
+      case "kit_prepared": 
+      case "pending_acceptance": return "#f59e0b"; 
       default: return "#64748b";
     }
   };
@@ -57,13 +51,37 @@ export default function AdminMachines() {
                 {m.status?.toUpperCase().replace("_", " ")}
               </span>
             </div>
+            
             <div style={{ fontSize: 13, color: "#64748b", fontFamily: "monospace" }}>ID: {m.id}</div>
-            <div style={{ marginTop: 15, fontSize: 14, color: "#475569" }}>
-              📍 {m.location || "No location set"}
+            
+            {/* 🟢 UPDATED: Location with Google Maps Button */}
+            <div style={{ marginTop: 15, fontSize: 14, color: "#475569", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>📍 {m.location || "No location set"}</span>
+              {m.googleMapsUrl && (
+                <a 
+                  href={m.googleMapsUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  onClick={(e) => e.stopPropagation()} 
+                  style={mapBtn}
+                >
+                  🗺️ Map
+                </a>
+              )}
             </div>
+            
             <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                <span style={{ fontSize: 12, color: "#94a3b8" }}>Refiller:</span>
                <span style={{ fontSize: 12, fontWeight: "600" }}>{m.assignedEmail || "Unassigned"}</span>
+            </div>
+
+            <div style={{ marginTop: 15, paddingTop: 15, borderTop: "1px solid #f1f5f9", display: "flex", gap: 10 }}>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); navigate(`/admin/machines/${m.id}/make-kit`); }}
+                  style={{ flex: 1, padding: "8px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 6, fontWeight: "bold", cursor: "pointer" }}
+                >
+                  📦 Prepare Kit
+                </button>
             </div>
           </div>
         ))}
@@ -74,3 +92,4 @@ export default function AdminMachines() {
 
 const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 20 };
 const card = { background: "#fff", padding: 20, borderRadius: 12, border: "1px solid #e2e8f0", cursor: "pointer", transition: "transform 0.2s", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" };
+const mapBtn = { color: "#3b82f6", textDecoration: "none", fontSize: 12, fontWeight: "bold", background: "#eff6ff", padding: "4px 8px", borderRadius: 4, display: "inline-block" };

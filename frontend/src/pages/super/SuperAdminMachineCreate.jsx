@@ -36,13 +36,13 @@ export default function SuperAdminMachineCreate() {
     id: "",
     name: "",
     location: "",
+    googleMapsUrl: "", // 🟢 NEW FIELD
     capacity: "",
-    orgId: "", // 🟢 New Field
+    orgId: "", 
   });
 
   const [saving, setSaving] = useState(false);
 
-  // 🟢 Load Organizations on Mount
   useEffect(() => {
     async function loadOrgs() {
       try {
@@ -75,8 +75,9 @@ export default function SuperAdminMachineCreate() {
         id: form.id,
         name: form.name,
         location: form.location || null,
+        googleMapsUrl: form.googleMapsUrl || null, // 🟢 Saved to DB
         capacity: Number(form.capacity) || null,
-        orgId: form.orgId || null, // 🟢 Assign to Org immediately
+        orgId: form.orgId || null, 
         assigned: !!form.orgId,
         status: form.orgId ? "active" : "unassigned",
         deleted: false,
@@ -126,10 +127,21 @@ export default function SuperAdminMachineCreate() {
         />
 
         <Field
-          label="Location (optional)"
+          label="Location Text (optional)"
           name="location"
           value={form.location}
           onChange={updateField}
+          placeholder="e.g. Ground Floor Lobby"
+        />
+
+        {/* 🟢 NEW INPUT FIELD */}
+        <Field
+          label="Google Maps URL (optional)"
+          name="googleMapsUrl"
+          value={form.googleMapsUrl}
+          onChange={updateField}
+          placeholder="https://maps.app.goo.gl/..."
+          type="url"
         />
 
         <Field
@@ -140,17 +152,11 @@ export default function SuperAdminMachineCreate() {
           onChange={updateField}
         />
 
-        {/* 🟢 Dropdown to assign to an organization */}
         <div style={{ marginBottom: 14 }}>
           <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>
             Assign to Organization
           </label>
-          <select 
-            name="orgId" 
-            value={form.orgId} 
-            onChange={updateField} 
-            style={input}
-          >
+          <select name="orgId" value={form.orgId} onChange={updateField} style={input}>
             <option value="">-- Leave Unassigned --</option>
             {orgs.map(org => (
               <option key={org.id} value={org.id}>{org.name}</option>
@@ -162,12 +168,7 @@ export default function SuperAdminMachineCreate() {
           <button type="submit" disabled={saving} style={btnPrimary}>
             {saving ? "Creating…" : "Create & Assign Machine"}
           </button>
-
-          <button
-            type="button"
-            onClick={() => navigate("/super/machines")}
-            style={btnSecondary}
-          >
+          <button type="button" onClick={() => navigate("/super/machines")} style={btnSecondary}>
             Cancel
           </button>
         </div>
@@ -176,29 +177,6 @@ export default function SuperAdminMachineCreate() {
   );
 }
 
-const input = {
-  width: "100%",
-  padding: "10px",
-  borderRadius: 6,
-  border: "1px solid #ccc",
-};
-
-const btnPrimary = {
-  padding: "10px 16px",
-  background: "#1e88e5",
-  color: "#fff",
-  border: "none",
-  borderRadius: 6,
-  cursor: "pointer",
-  fontWeight: "bold"
-};
-
-const btnSecondary = {
-  marginLeft: 12,
-  padding: "10px 16px",
-  background: "#e0e0e0",
-  border: "none",
-  borderRadius: 6,
-  cursor: "pointer",
-  fontWeight: "bold"
-};
+const input = { width: "100%", padding: "10px", borderRadius: 6, border: "1px solid #ccc" };
+const btnPrimary = { padding: "10px 16px", background: "#1e88e5", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const btnSecondary = { marginLeft: 12, padding: "10px 16px", background: "#e0e0e0", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };

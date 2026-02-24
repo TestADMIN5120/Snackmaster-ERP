@@ -45,9 +45,7 @@ export default function AdminLayout() {
         ...linkStyle,
         background: isActive(to) ? "rgba(11, 195, 255, 0.15)" : "transparent",
         color: isActive(to) ? "#0bc3ff" : "#eee",
-        borderLeft: isActive(to)
-          ? "4px solid #0bc3ff"
-          : "4px solid transparent"
+        borderLeft: isActive(to) ? "4px solid #0bc3ff" : "4px solid transparent"
       }}
     >
       <span style={{ marginRight: 10 }}>{icon}</span>
@@ -72,28 +70,20 @@ export default function AdminLayout() {
         </div>
 
         {/* NAVIGATION */}
-        <nav
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 6,
-            flex: 1,
-            overflowY: "auto",
-            paddingRight: 5,
-            marginBottom: 20
-          }}
-        >
+        <nav style={navWrapper}>
           <NavLink to="/admin" label="Dashboard" icon="📊" />
-          <NavLink to="/admin/issues" label="Machine Issues" icon="🚨" />
 
-          <div style={{ margin: "10px 0" }}>
-            <div style={sectionHeader}>Inventory</div>
+          {/* 🟢 ZONE 1: INVENTORY & ROUTE */}
+          <div style={zoneStyle}>
+            <div style={sectionHeader}>Inventory & Route</div>
             <NavLink to="/admin/machines" label="All Machines" icon="🤖" />
             <NavLink to="/admin/machines/assign" label="Assign Route" icon="📍" />
+            <NavLink to="/admin/products" label="Active Products" icon="🍫" />
           </div>
 
-          <div style={{ margin: "10px 0" }}>
-            <div style={sectionHeader}>Warehouse Ops</div>
+          {/* 🟢 ZONE 2: WAREHOUSE OPS (HIGHLIGHTED) */}
+          <div style={warehouseZoneStyle}>
+            <div style={{...sectionHeader, color: "#0bc3ff", fontWeight: "bold"}}>Warehouse Ops</div>
             <NavLink to="/admin/warehouse/dashboard" label="Dashboard" icon="📈" />
             <NavLink to="/admin/warehouse/master-products" label="Master Catalog" icon="📖" />
             <NavLink to="/admin/warehouse/inward" label="Inward Stock" icon="📥" />
@@ -104,14 +94,18 @@ export default function AdminLayout() {
             <NavLink to="/admin/warehouse/movements" label="Stock Ledger" icon="📋" />
           </div>
 
-          <NavLink to="/admin/products" label="Active Products" icon="🍫" />
-          <NavLink to="/admin/refill-logs" label="Refill Logs" icon="📦" />
-          <NavLink to="/admin/audit-logs" label="Audit Logs" icon="📋" />
-          <NavLink to="/admin/users" label="Team (Refillers)" icon="👔" />
+          {/* 🟢 ZONE 3: TRACKING & AUDITS */}
+          <div style={zoneStyle}>
+            <div style={sectionHeader}>Tracking & Audits</div>
+            <NavLink to="/admin/issues" label="Machine Issues" icon="🚨" />
+            <NavLink to="/admin/refill-logs" label="Refill Logs" icon="📋" />
+            <NavLink to="/admin/audit-logs" label="Audit Logs" icon="🔍" />
+          </div>
 
-          {/* 🟢 SECURITY SECTION */}
-          <div style={{ margin: "10px 0" }}>
-            <div style={sectionHeader}>Security</div>
+          {/* 🟢 ZONE 4: TEAM & SECURITY */}
+          <div style={zoneStyle}>
+            <div style={sectionHeader}>Team & Security</div>
+            <NavLink to="/admin/users" label="Team (Refillers)" icon="👔" />
             <NavLink to="/admin/access-requests" label="Access Requests" icon="🔑" />
             <NavLink to="/admin/change-password" label="Change Password" icon="🔒" />
           </div>
@@ -157,24 +151,49 @@ const sidebarStyle = {
   zIndex: 10
 };
 
+const navWrapper = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  flex: 1,
+  overflowY: "auto",
+  paddingRight: 5,
+  marginBottom: 20
+};
+
+// Standard Zone grouping
+const zoneStyle = { 
+  margin: "10px 0" 
+};
+
+// 🟢 NEW Highlighted Warehouse Zone
+const warehouseZoneStyle = {
+  margin: "10px 0",
+  background: "rgba(11, 195, 255, 0.05)", // Soft blue tint
+  border: "1px solid rgba(11, 195, 255, 0.2)", // Subtle border
+  borderRadius: 8,
+  padding: "10px 0",
+  boxShadow: "inset 0 4px 10px rgba(0,0,0,0.2)"
+};
+
 const sectionHeader = {
   color: "#777",
   fontSize: 11,
   padding: "0 12px",
   textTransform: "uppercase",
   letterSpacing: 1,
-  marginBottom: 5
+  marginBottom: 8
 };
 
 const linkStyle = {
   textDecoration: "none",
-  padding: "12px 16px",
+  padding: "10px 16px",
   borderRadius: "0 8px 8px 0",
   fontWeight: 600,
   transition: "all 0.2s ease",
   display: "flex",
   alignItems: "center",
-  fontSize: 14
+  fontSize: 13
 };
 
 const logoutStyle = {

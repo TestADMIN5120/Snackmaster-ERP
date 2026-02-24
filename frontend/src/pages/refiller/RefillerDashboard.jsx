@@ -7,12 +7,12 @@ import { useNavigate } from "react-router-dom";
 export default function RefillerDashboard() {
   const { user } = useAdmin();
   const navigate = useNavigate();
-  
+
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // 📡 Real-time Online/Offline tracking
+  /* 📡 Online / Offline tracking */
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -24,11 +24,9 @@ export default function RefillerDashboard() {
     };
   }, []);
 
-  // 📥 Fetch Machines
+  /* 📥 Fetch assigned machines */
   useEffect(() => {
     if (!user?.uid) return;
-
-    console.log("RefillerDashboard: Fetching machines for UID:", user.uid);
 
     const q = query(
       collection(db, "machines"),
@@ -39,13 +37,11 @@ export default function RefillerDashboard() {
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        console.log("RefillerDashboard: Machines found:", list.length);
-        setMachines(list);
+        setMachines(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setLoading(false);
       },
       (err) => {
-        console.error("RefillerDashboard: Firestore error:", err);
+        console.error("RefillerDashboard Firestore error:", err);
         setLoading(false);
       }
     );
@@ -53,7 +49,7 @@ export default function RefillerDashboard() {
     return () => unsubscribe();
   }, [user]);
 
-  // ⏱️ Helper: Convert Timestamp to "2h ago"
+  /* ⏱️ Time Ago Helper */
   function timeAgo(date) {
     if (!date) return "Never";
     const seconds = Math.floor((new Date() - date) / 1000);
@@ -66,52 +62,77 @@ export default function RefillerDashboard() {
     return `${days}d ago`;
   }
 
-  // 🧠 Helper: Map Status to Strict UI Rules
+  /* 🧠 Status → UI rules */
   function getMachineConfig(status) {
     switch (status) {
       case "active":
       case "ready":
-        return { 
-          badgeBg: "#dcfce7", badgeCol: "#166534", badgeText: "🟢 Ready", 
-          btnBg: "#1976d2", btnText: "📦 Create Kit", disabled: false 
+        return {
+          badgeBg: "#dcfce7",
+          badgeCol: "#166534",
+          badgeText: "🟢 Ready",
+          btnBg: "#1976d2",
+          btnText: "📦 View Details",
+          disabled: false
         };
 
       case "kit_prepared":
-        return { 
-          badgeBg: "#fef08a", badgeCol: "#854d0e", badgeText: "🟡 Kit Prepared", 
-          btnBg: "#16a34a", btnText: "🚀 Let's Refill Now", disabled: false 
+      case "pending_acceptance":
+        return {
+          badgeBg: "#fef08a",
+          badgeCol: "#854d0e",
+          badgeText: "🟡 Kit Pending",
+          btnBg: "#f59e0b",
+          btnText: "🚚 Accept Kit",
+          disabled: false
         };
 
       case "refill_in_progress":
-        return { 
-          badgeBg: "#dbeafe", badgeCol: "#1e40af", badgeText: "🔵 Refill In Progress", 
-          btnBg: "#3b82f6", btnText: "🚀 Resume Refill", disabled: false 
+        return {
+          badgeBg: "#dbeafe",
+          badgeCol: "#1e40af",
+          badgeText: "🔵 Refill In Progress",
+          btnBg: "#3b82f6",
+          btnText: "🚀 Resume Refill",
+          disabled: false
         };
 
       case "refill_pending":
-        return { 
-          badgeBg: "#f1f5f9", badgeCol: "#475569", badgeText: "⏳ Syncing...", 
-          btnBg: "#94a3b8", btnText: "Processing", disabled: true 
+        return {
+          badgeBg: "#f1f5f9",
+          badgeCol: "#475569",
+          badgeText: "⏳ Syncing...",
+          btnBg: "#94a3b8",
+          btnText: "Processing",
+          disabled: true
         };
 
       case "issue_reported":
-        return { 
-          badgeBg: "#fee2e2", badgeCol: "#991b1b", badgeText: "🔴 Issue Reported", 
-          btnBg: "#dc2626", btnText: "👀 View Issue", disabled: false 
+        return {
+          badgeBg: "#fee2e2",
+          badgeCol: "#991b1b",
+          badgeText: "🔴 Issue Reported",
+          btnBg: "#dc2626",
+          btnText: "👀 View Issue",
+          disabled: false
         };
 
       default:
-        return { 
-          badgeBg: "#f1f5f9", badgeCol: "#475569", badgeText: status || "Unknown", 
-          btnBg: "#64748b", btnText: "Manage", disabled: false 
+        return {
+          badgeBg: "#f1f5f9",
+          badgeCol: "#475569",
+          badgeText: status || "Unknown",
+          btnBg: "#64748b",
+          btnText: "Manage",
+          disabled: false
         };
     }
   }
 
   return (
     <div style={{ padding: 20, maxWidth: 1000, margin: "0 auto", paddingBottom: 100 }}>
-      
-      {/* 👤 REFILLER PROFILE & NETWORK STATUS */}
+
+      {/* 👤 Profile + Network */}
       <div style={topBar}>
         <div>
           <div style={{ fontSize: 14, color: "#666" }}>Logged in as</div>
@@ -130,39 +151,14 @@ export default function RefillerDashboard() {
         </div>
       </div>
 
-      {/* 🟢 HEADER WITH TOP ACTION BUTTONS */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: 20 }}>
+      {/* Header + Actions */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
         <h1 style={{ margin: 0, color: "#333" }}>My Route</h1>
-        <div style={{ display: "flex", gap: "10px" }}>
-          
-          {/* 🟢 NEW VISIBLE PASSWORD BUTTON */}
-          <button
-            onClick={() => navigate("/refiller/change-password")}
-            style={{
-              padding: "10px 16px",
-              background: "#0ea5e9",
-              color: "white",
-              border: "none",
-              borderRadius: 6,
-              cursor: "pointer",
-              fontWeight: "bold"
-            }}
-          >
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => navigate("/refiller/change-password")} style={btnTop}>
             🔑 Security
           </button>
-
-          <button
-            onClick={() => navigate("/refiller/history")}
-            style={{
-              padding: "10px 16px",
-              background: "#546e7a",
-              color: "white",
-              border: "none",
-              borderRadius: 6,
-              cursor: "pointer",
-              fontWeight: "bold"
-            }}
-          >
+          <button onClick={() => navigate("/refiller/history")} style={{ ...btnTop, background: "#546e7a" }}>
             📜 History
           </button>
         </div>
@@ -171,21 +167,12 @@ export default function RefillerDashboard() {
       {loading && <p>Loading machines...</p>}
 
       {!loading && machines.length === 0 && (
-        <div
-          style={{
-            padding: 40,
-            textAlign: "center",
-            background: "#fff",
-            borderRadius: 12,
-            color: "#666",
-            border: "1px dashed #ccc"
-          }}
-        >
+        <div style={{ padding: 40, textAlign: "center", background: "#fff", borderRadius: 12, color: "#666", border: "1px dashed #ccc" }}>
           You have no machines assigned to you right now.
         </div>
       )}
 
-      {/* 📦 MACHINE GRID */}
+      {/* 🧾 Machine Grid */}
       <div style={grid}>
         {machines.map((m) => {
           const config = getMachineConfig(m.status);
@@ -195,8 +182,7 @@ export default function RefillerDashboard() {
 
           return (
             <div key={m.id} style={card}>
-              {/* Card Header */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 15 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 15 }}>
                 <div>
                   <h3 style={{ margin: "0 0 4px 0", fontSize: 18 }}>
                     {m.name || "Unnamed Machine"}
@@ -205,31 +191,31 @@ export default function RefillerDashboard() {
                     {m.id}
                   </span>
                 </div>
-                <div
-                  style={{
-                    background: config.badgeBg,
-                    color: config.badgeCol,
-                    padding: "4px 8px",
-                    borderRadius: 8,
-                    fontSize: 12,
-                    fontWeight: "bold"
-                  }}
-                >
+                <div style={{ background: config.badgeBg, color: config.badgeCol, padding: "4px 8px", borderRadius: 8, fontSize: 12, fontWeight: "bold" }}>
                   {config.badgeText}
                 </div>
               </div>
 
-              {/* Card Details */}
               <div style={{ marginBottom: 20, fontSize: 14, color: "#444" }}>
-                <div style={{ marginBottom: 6 }}>
-                  📍 {m.location || "Location not set"}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span>📍 {m.location || "Location not set"}</span>
+                  {m.googleMapsUrl && (
+                    <a
+                      href={m.googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={mapBtn}
+                    >
+                      🗺️ Directions
+                    </a>
+                  )}
                 </div>
                 <div>
                   🕒 Last Refill: <strong>{timeAgo(lastRefillDate)}</strong>
                 </div>
               </div>
 
-              {/* Contextual Action Button */}
               <button
                 onClick={() => navigate(`/refiller/machines/${m.id}`)}
                 disabled={config.disabled}
@@ -250,9 +236,11 @@ export default function RefillerDashboard() {
   );
 }
 
-// Styles
+/* ─── Styles ─── */
 const topBar = { background: "#fff", padding: "15px 20px", borderRadius: 12, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 25, boxShadow: "0 2px 5px rgba(0,0,0,0.04)" };
 const networkBadge = { padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: "bold" };
 const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 20 };
 const card = { background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid #eaeaea", display: "flex", flexDirection: "column" };
-const actionBtn = { marginTop: "auto", width: "100%", padding: 14, color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", fontSize: 15, transition: "background 0.2s" };
+const actionBtn = { marginTop: "auto", width: "100%", padding: 14, color: "#fff", border: "none", borderRadius: 8, fontWeight: "bold", fontSize: 15 };
+const btnTop = { padding: "10px 16px", background: "#0ea5e9", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const mapBtn = { color: "#3b82f6", textDecoration: "none", fontSize: 12, fontWeight: "bold", background: "#eff6ff", padding: "4px 8px", borderRadius: 4 };

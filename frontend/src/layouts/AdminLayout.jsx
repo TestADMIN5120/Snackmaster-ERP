@@ -81,9 +81,11 @@ export default function AdminLayout() {
             <NavLink to="/admin/products" label="Active Products" icon="🍫" />
           </div>
 
-          {/* 🟢 ZONE 2: WAREHOUSE OPS (HIGHLIGHTED) */}
+          {/* 🟢 ZONE 2: WAREHOUSE OPS */}
           <div style={warehouseZoneStyle}>
-            <div style={{...sectionHeader, color: "#0bc3ff", fontWeight: "bold"}}>Warehouse Ops</div>
+            <div style={{ ...sectionHeader, color: "#0bc3ff", fontWeight: "bold" }}>
+              Warehouse Ops
+            </div>
             <NavLink to="/admin/warehouse/dashboard" label="Dashboard" icon="📈" />
             <NavLink to="/admin/warehouse/master-products" label="Master Catalog" icon="📖" />
             <NavLink to="/admin/warehouse/inward" label="Inward Stock" icon="📥" />
@@ -102,7 +104,14 @@ export default function AdminLayout() {
             <NavLink to="/admin/audit-logs" label="Audit Logs" icon="🔍" />
           </div>
 
-          {/* 🟢 ZONE 4: TEAM & SECURITY */}
+          {/* 🟢 ZONE 4: SALES & FINANCIALS (NEW – ADDED SAFELY) */}
+          <div style={zoneStyle}>
+            <div style={sectionHeader}>Sales & Financials</div>
+            <NavLink to="/admin/sales/ledger" label="Transaction Ledger" icon="🧾" />
+            <NavLink to="/admin/sales/analytics" label="Sales Analytics" icon="📈" />
+          </div>
+
+          {/* 🟢 ZONE 5: TEAM & SECURITY */}
           <div style={zoneStyle}>
             <div style={sectionHeader}>Team & Security</div>
             <NavLink to="/admin/users" label="Team (Refillers)" icon="👔" />
@@ -161,16 +170,12 @@ const navWrapper = {
   marginBottom: 20
 };
 
-// Standard Zone grouping
-const zoneStyle = { 
-  margin: "10px 0" 
-};
+const zoneStyle = { margin: "10px 0" };
 
-// 🟢 NEW Highlighted Warehouse Zone
 const warehouseZoneStyle = {
   margin: "10px 0",
-  background: "rgba(11, 195, 255, 0.05)", // Soft blue tint
-  border: "1px solid rgba(11, 195, 255, 0.2)", // Subtle border
+  background: "rgba(11, 195, 255, 0.05)",
+  border: "1px solid rgba(11, 195, 255, 0.2)",
   borderRadius: 8,
   padding: "10px 0",
   boxShadow: "inset 0 4px 10px rgba(0,0,0,0.2)"

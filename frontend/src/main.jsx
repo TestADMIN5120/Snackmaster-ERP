@@ -25,7 +25,7 @@ import AdminUsers from "./pages/admin/AdminUsers";
 import AdminAssignMachines from "./pages/admin/AdminAssignMachines";
 import AdminMachineSlots from "./pages/admin/AdminMachineSlots";
 import AdminMachineIssues from "./pages/admin/AdminMachineIssues";
-import AdminMakeKit from "./pages/admin/AdminMakeKit"; // 🟢 NEW
+import AdminMakeKit from "./pages/admin/AdminMakeKit"; 
 import AccessRequests from "./pages/admin/AccessRequests";
 
 /* ───────── WAREHOUSE ───────── */
@@ -37,6 +37,10 @@ import AdminKits from "./pages/admin/AdminKits";
 import AdminMasterProducts from "./pages/admin/AdminMasterProducts";
 import WarehouseReturns from "./pages/admin/WarehouseReturns";
 import WarehouseExpired from "./pages/admin/WarehouseExpired";
+
+/* ───────── 🟢 SALES & FINANCIALS (NEW) ───────── */
+import AdminSalesLedger from "./pages/admin/sales/AdminSalesLedger";
+import AdminSalesAnalytics from "./pages/admin/sales/AdminSalesAnalytics";
 
 /* ───────── REFILLER ───────── */
 import RefillerLayout from "./layouts/RefillerLayout";
@@ -113,7 +117,6 @@ function AppRoutes() {
         <Route path="machines/:machineId" element={<RefillerMachinePage />} />
         <Route path="machines/:machineId/slots" element={<RefillerMachineSlots />} />
         <Route path="machines/:machineId/report-issue" element={<RefillerReportIssue />} />
-        {/* 🟢 RefillerMakeKit REMOVED */}
         <Route path="history" element={<RefillerHistory />} />
         <Route path="change-password" element={<ChangePassword />} />
       </Route>
@@ -147,8 +150,6 @@ function AppRoutes() {
         <Route path="machines" element={<AdminMachines />} />
         <Route path="machines/assign" element={<AdminAssignMachines />} />
         <Route path="machines/:machineId/slots" element={<AdminMachineSlots />} />
-
-        {/* 🟢 ADMIN MAKE KIT */}
         <Route path="machines/:machineId/make-kit" element={<AdminMakeKit />} />
 
         {/* WAREHOUSE */}
@@ -160,6 +161,10 @@ function AppRoutes() {
         <Route path="warehouse/expired" element={<WarehouseExpired />} />
         <Route path="warehouse/kits" element={<AdminKits />} />
         <Route path="warehouse/movements" element={<WarehouseLedger />} />
+
+        {/* 🟢 NEW: SALES & FINANCIALS */}
+        <Route path="sales/ledger" element={<AdminSalesLedger />} />
+        <Route path="sales/analytics" element={<AdminSalesAnalytics />} />
 
         <Route path="products" element={<AdminProducts />} />
         <Route path="refill-logs" element={<AdminRefillLogs />} />

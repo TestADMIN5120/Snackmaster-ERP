@@ -3,7 +3,21 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./serviceAccountKey.json");
+// 🟢 DYNAMIC FIREBASE SECRETS (Cloud + Local Support)
+let serviceAccount;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  // If deployed to Render, use the secure Environment Variable
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  // If running locally, use the JSON file
+  try {
+    serviceAccount = require("./serviceAccountKey.json");
+  } catch (err) {
+    console.error("❌ CRITICAL: No FIREBASE_SERVICE_ACCOUNT env var, and serviceAccountKey.json is missing.");
+    process.exit(1); // Stop the server from crashing wildly
+  }
+}
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
@@ -15,18 +29,10 @@ app.use(cors());
 app.use(bodyParser.json());
 
 /* ──────────────────────────────────────────────
-   CONFIRM REFILL API (UNCHANGED)
+   CONFIRM REFILL API 
 ────────────────────────────────────────────── */
 app.post("/api/confirm-refill", async (req, res) => {
-  const {
-    machineId,
-    orgId,
-    refillerId,
-    userEmail,
-    kitId,
-    products,
-    returnedItems
-  } = req.body;
+  const { machineId, orgId, refillerId, userEmail, kitId, products, returnedItems } = req.body;
 
   if (!machineId || !orgId) {
     return res.status(400).json({ error: "Missing fields" });
@@ -47,11 +53,7 @@ app.post("/api/confirm-refill", async (req, res) => {
 
     const logRef = db.collection("refill_logs").doc();
     batch.set(logRef, {
-      machineId,
-      orgId,
-      refillerId,
-      userEmail,
-      kitId: kitId || null,
+      machineId, orgId, refillerId, userEmail, kitId: kitId || null,
       audited_inventory: products || [],
       returns: returnedItems || [],
       completedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -69,22 +71,18 @@ app.post("/api/confirm-refill", async (req, res) => {
     if (Array.isArray(returnedItems) && returnedItems.length > 0) {
       returnedItems.forEach((item) => {
         if (!item.productId || !item.quantity) return;
-
         const qty = Number(item.quantity);
         const isExpired = item.condition === "expired";
-
         const movementRef = db.collection("warehouse_movements").doc();
+
         batch.set(movementRef, {
           type: isExpired ? "EXPIRED" : "RETURN",
           productId: item.productId,
           productName: item.name || "Unknown Product",
           quantity: qty,
           referenceId: kitId || `REF_${machineId}`,
-          remarks:
-            item.reason ||
-            (isExpired ? "Expired at machine" : "Returned unsold"),
-          orgId,
-          performedBy: userEmail,
+          remarks: item.reason || (isExpired ? "Expired at machine" : "Returned unsold"),
+          orgId, performedBy: userEmail,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
@@ -117,15 +115,9 @@ app.post("/api/admin-reset-password", async (req, res) => {
   }
 
   try {
-    // 1. Look up user by email
     const userRecord = await admin.auth().getUserByEmail(targetEmail);
+    await admin.auth().updateUser(userRecord.uid, { password: newPassword });
 
-    // 2. Force update password
-    await admin.auth().updateUser(userRecord.uid, {
-      password: newPassword
-    });
-
-    // 3. Log audit trail
     await db.collection("audit_logs").add({
       action: "MANUAL_PASSWORD_RESET",
       targetEmail: targetEmail,
@@ -141,6 +133,4 @@ app.post("/api/admin-reset-password", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, () =>
-  console.log(`🚀 Backend live on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`🚀 Backend live on port ${PORT}`));

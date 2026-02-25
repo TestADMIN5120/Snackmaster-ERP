@@ -21,6 +21,7 @@ venv/
 env/
 __pycache__/
 *.pyc
+.csv
 
 # 4. Ignore Production Build Folders (Vite creates these)
 dist/

@@ -12,6 +12,12 @@ export default function WarehouseReturns() {
   const [dateReturned, setDateReturned] = useState(new Date().toISOString().split('T')[0]);
   const [machineId, setMachineId] = useState("");
   const [remarks, setRemarks] = useState("");
+
+  // 🟢 NEW MANDATORY TRACEABILITY FIELDS
+  const [issuedBy, setIssuedBy] = useState("");
+  const [issuedTo, setIssuedTo] = useState("");
+  const [destination, setDestination] = useState("");
+
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -28,7 +34,10 @@ export default function WarehouseReturns() {
 
   async function handleReturn(e) {
     e.preventDefault();
-    if (!selectedProduct || !qty || !dateReturned) return alert("Fill required fields.");
+    // 🟢 UPDATED VALIDATION
+    if (!selectedProduct || !qty || !dateReturned || !issuedBy || !issuedTo || !destination) {
+      return alert("Fill all required fields, including tracking information.");
+    }
 
     const targetProduct = products.find(p => p.id === selectedProduct);
     if (!window.confirm(`Add ${qty} units of [${targetProduct.sku || 'N/A'}] ${targetProduct.name} back to usable stock?`)) return;
@@ -45,6 +54,9 @@ export default function WarehouseReturns() {
         movementDate: Timestamp.fromDate(movementDate),
         referenceId: machineId || "N/A",
         remarks: remarks || "Returned from field",
+        issuedBy: issuedBy,       // 🟢 SAVING TRACEABILITY
+        issuedTo: issuedTo,       // 🟢 SAVING TRACEABILITY
+        destination: destination, // 🟢 SAVING TRACEABILITY
         orgId: orgId,
         performedBy: user.email,
         createdAt: serverTimestamp()
@@ -57,6 +69,7 @@ export default function WarehouseReturns() {
 
       alert("✅ Returned stock added to warehouse!");
       setQty(""); setRemarks(""); setMachineId("");
+      setIssuedBy(""); setIssuedTo(""); setDestination("");
       loadProducts(); 
     } catch (err) {
       console.error(err);
@@ -76,7 +89,6 @@ export default function WarehouseReturns() {
           <form onSubmit={handleReturn} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
             <label style={label}>Date Returned * <input type="date" value={dateReturned} onChange={(e) => setDateReturned(e.target.value)} style={input} required /></label>
             
-            {/* 🟢 UPDATED DROPDOWN */}
             <label style={label}>
               Select Active Product *
               <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} style={input} required>
@@ -89,6 +101,15 @@ export default function WarehouseReturns() {
 
             <label style={label}>Qty Returned * <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={input} required /></label>
             <label style={label}>From Machine ID (Optional) <input type="text" value={machineId} onChange={(e) => setMachineId(e.target.value)} style={input} placeholder="e.g. SNACK-001" /></label>
+
+            {/* 🟢 NEW TRACEABILITY FIELDS */}
+            <div style={{ padding: 15, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 10 }}>
+               <h4 style={{ margin: 0, color: "#334155" }}>Traceability Details</h4>
+               <label style={label}>Returned By * <input type="text" value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} style={input} required placeholder="Name of refiller returning stock" /></label>
+               <label style={label}>Received By * <input type="text" value={issuedTo} onChange={(e) => setIssuedTo(e.target.value)} style={input} required placeholder="Name of admin receiving stock" /></label>
+               <label style={label}>Destination / For Where * <input type="text" value={destination} onChange={(e) => setDestination(e.target.value)} style={input} required placeholder="e.g. Back to Main Inventory" /></label>
+            </div>
+
             <label style={label}>Reason / Remarks <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={input} rows="2" placeholder="e.g. Unsold, machine broken..." /></label>
 
             <button type="submit" disabled={loading} style={btnWarning}>{loading ? "Processing..." : "🔄 Process Return"}</button>
@@ -98,7 +119,6 @@ export default function WarehouseReturns() {
         <div style={{ ...card, flex: 1, minWidth: 300, background: "#f8fafc" }}>
           <h3 style={{ marginTop: 0, color: "#334155" }}>Current Stock</h3>
           <div style={{ maxHeight: 400, overflowY: "auto" }}>
-            {/* 🟢 UPDATED LIST */}
             {products.map(p => (
               <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e2e8f0" }}>
                 <span style={{ fontSize: 14, fontWeight: "500" }}><span style={{color: "#0284c7", fontFamily: "monospace"}}>[{p.sku || "N/A"}]</span> {p.name}</span>

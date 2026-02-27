@@ -144,17 +144,11 @@ export function generateMachineSlotPDF(machine, slots) {
 }
 
 /* ──────────────────────────────────────────────
-   🟢 NEW: SALES INVOICE PDF (5% GST CALCULATION)
+   🟢 NEW: SALES INVOICE PDF (MULTI-ITEM & 5% GST CALCULATION)
 ────────────────────────────────────────────── */
 export function generateInvoicePDF(txn) {
   if (!txn) return;
   const doc = new jsPDF();
-
-  // Reverse 5% GST calculation
-  const totalAmount = Number(txn.amount) || 0;
-  const basePrice = totalAmount / 1.05;
-  const cgst = basePrice * 0.025; // 2.5%
-  const sgst = basePrice * 0.025; // 2.5%
 
   doc.setFontSize(22);
   doc.setTextColor(15, 23, 42);
@@ -174,22 +168,50 @@ export function generateInvoicePDF(txn) {
   doc.text(`Transaction ID: ${txn.txnId}`, 14, 50);
   
   // Format the date properly for the PDF
-  const txnDate = txn.date?.seconds ? new Date(txn.date.seconds * 1000).toLocaleString("en-IN") : txn.date;
+  const txnDate = txn.date?.seconds ? new Date(txn.date.seconds * 1000).toLocaleString("en-IN") : (txn.date || "Unknown Date");
   doc.text(`Date & Time: ${txnDate}`, 14, 56);
   
   doc.text(`Machine ID: ${txn.machineId}`, 120, 50);
   doc.text(`Org ID: ${txn.orgId}`, 120, 56);
 
-  const tableData = [
-    [
-      txn.productName || "Unknown Item",
-      "1", // Default qty 1 per transaction
+  let tableData = [];
+  let grandTotal = 0;
+
+  // 🟢 LOGIC: Check if it's a Multi-Item Transaction or Single
+  if (txn.items && txn.items.length > 0) {
+    txn.items.forEach(item => {
+      const amount = Number(item.price) || 0;
+      const basePrice = amount / 1.05;
+      const cgst = basePrice * 0.025;
+      const sgst = basePrice * 0.025;
+      grandTotal += amount;
+
+      tableData.push([
+        `${item.productName} (${item.slotId})`,
+        "1", // Currently, the CSV parser treats each slot purchase as 1 qty
+        `Rs. ${basePrice.toFixed(2)}`,
+        `Rs. ${cgst.toFixed(2)}`,
+        `Rs. ${sgst.toFixed(2)}`,
+        `Rs. ${amount.toFixed(2)}`
+      ]);
+    });
+  } else {
+    // Fallback for older single-item transactions
+    const totalAmount = Number(txn.amount) || 0;
+    const basePrice = totalAmount / 1.05;
+    const cgst = basePrice * 0.025;
+    const sgst = basePrice * 0.025;
+    grandTotal = totalAmount;
+
+    tableData.push([
+      `${txn.productName || "Unknown Item"} ${txn.slotId ? `(${txn.slotId})` : ""}`,
+      "1",
       `Rs. ${basePrice.toFixed(2)}`,
       `Rs. ${cgst.toFixed(2)}`,
       `Rs. ${sgst.toFixed(2)}`,
       `Rs. ${totalAmount.toFixed(2)}`
-    ]
-  ];
+    ]);
+  }
 
   autoTable(doc, {
     startY: 65,
@@ -209,7 +231,7 @@ export function generateInvoicePDF(txn) {
   
   doc.setFontSize(12);
   doc.setTextColor(15, 23, 42);
-  doc.text(`Total Amount Received: Rs. ${totalAmount.toFixed(2)}`, 120, finalY);
+  doc.text(`Total Amount Received: Rs. ${grandTotal.toFixed(2)}`, 120, finalY);
 
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);

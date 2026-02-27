@@ -36,7 +36,9 @@ export default function WarehouseLedger() {
     return movements.filter(m => {
       const matchSearch = (m.productName || "").toLowerCase().includes(search.toLowerCase()) || 
                           (m.batchId || "").toLowerCase().includes(search.toLowerCase()) ||
-                          (m.referenceId || "").toLowerCase().includes(search.toLowerCase());
+                          (m.referenceId || "").toLowerCase().includes(search.toLowerCase()) ||
+                          (m.issuedTo || "").toLowerCase().includes(search.toLowerCase()) ||
+                          (m.issuedBy || "").toLowerCase().includes(search.toLowerCase());
       const matchType = filterType === "ALL" || m.type === filterType;
       return matchSearch && matchType;
     });
@@ -56,22 +58,25 @@ export default function WarehouseLedger() {
       case "OUTWARD_KIT": return { background: "#dbeafe", color: "#1e40af", border: "1px solid #bfdbfe" };
       case "OUTWARD_MANUAL": return { background: "#ffedd5", color: "#c2410c", border: "1px solid #fed7aa" };
       case "RETURN": return { background: "#fef08a", color: "#854d0e", border: "1px solid #fde047" };
-      case "EXPIRED": return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+      case "EXPIRED_DAMAGED": return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" }; // 🟢 UPDATED TYPE
       default: return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
     }
   }
 
-  // 🟢 Bulk Export Function
+  // 🟢 Bulk Export Function Updated with Traceability
   const exportLedgerPDF = () => {
-    const columns = ["Date", "Type", "Product", "Qty", "Batch/Ref", "Performed By"];
-    const rows = filteredMovements.map(m => [
-      formatDate(m.createdAt),
-      m.type.replace("_", " "),
-      m.productName,
-      (m.type === "INWARD" || m.type === "RETURN" ? "+" : "-") + m.quantity.toString(),
-      (m.batchId ? `B:${m.batchId} ` : "") + (m.referenceId ? `R:${m.referenceId}` : ""),
-      m.performedBy
-    ]);
+    const columns = ["Date", "Type", "Product", "Qty", "From -> To (Location)", "Performed By"];
+    const rows = filteredMovements.map(m => {
+      const traceString = m.issuedBy ? `${m.issuedBy} -> ${m.issuedTo} (${m.destination})` : (m.batchId ? `B:${m.batchId} ` : "") + (m.referenceId ? `R:${m.referenceId}` : "");
+      return [
+        formatDate(m.createdAt),
+        m.type.replace("_", " "),
+        m.productName,
+        (m.type === "INWARD" || m.type === "RETURN" ? "+" : "-") + m.quantity.toString(),
+        traceString,
+        m.performedBy
+      ];
+    });
     generateBulkReportPDF("Full Stock Ledger Audit", columns, rows, orgId);
   };
 
@@ -82,20 +87,20 @@ export default function WarehouseLedger() {
       <div style={{display: "flex", justifyContent: "space-between", alignItems: "flex-start"}}>
         <div>
           <h1 style={{ marginBottom: 5, color: "#1e293b" }}>📋 Stock Ledger</h1>
-          <p style={{ color: "#64748b", marginBottom: 20 }}>Immutable record of all inventory movements.</p>
+          <p style={{ color: "#64748b", marginBottom: 20 }}>Immutable record of all inventory movements with full traceability.</p>
         </div>
         <button onClick={exportLedgerPDF} style={btnPrimary}>📄 Export Ledger Sheet</button>
       </div>
 
       <div style={filterBar}>
-        <input type="text" placeholder="Search product, batch, or kit ID..." value={search} onChange={(e) => {setSearch(e.target.value); setPage(1);}} style={inputStyle} />
+        <input type="text" placeholder="Search product, person, or reference..." value={search} onChange={(e) => {setSearch(e.target.value); setPage(1);}} style={inputStyle} />
         <select value={filterType} onChange={(e) => {setFilterType(e.target.value); setPage(1);}} style={inputStyle}>
           <option value="ALL">All Movements</option>
           <option value="INWARD">Inward (Received)</option>
           <option value="OUTWARD_KIT">Outward (Kit Issued)</option>
           <option value="OUTWARD_MANUAL">Outward (Manual)</option>
           <option value="RETURN">Returned</option>
-          <option value="EXPIRED">Expired</option>
+          <option value="EXPIRED_DAMAGED">Expired / Damaged</option> {/* 🟢 UPDATED LABEL */}
         </select>
       </div>
 
@@ -105,24 +110,44 @@ export default function WarehouseLedger() {
             <tr>
               <th style={th}>Date & Time</th>
               <th style={th}>Type</th>
-              <th style={th}>Product</th>
+              <th style={th}>Product Details</th>
               <th style={th}>Qty</th>
-              <th style={th}>Batch / Ref</th>
-              <th style={th}>Performed By</th>
+              <th style={th}>Traceability Info</th>
             </tr>
           </thead>
           <tbody>
             {paginatedMovements.map((m) => (
               <tr key={m.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                <td style={td}>{formatDate(m.createdAt)}</td>
-                <td style={td}><span style={{ padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: "bold", ...getBadgeStyle(m.type) }}>{m.type.replace("_", " ")}</span></td>
-                <td style={{...td, fontWeight: "600", color: "#1e293b"}}>{m.productName}</td>
-                <td style={{...td, fontWeight: "bold", color: m.type === "INWARD" || m.type === "RETURN" ? "#10b981" : "#ef4444"}}>{m.type === "INWARD" || m.type === "RETURN" ? "+" : "-"}{m.quantity}</td>
-                <td style={{...td, color: "#64748b", fontFamily: "monospace"}}>
-                  {m.batchId && <div>B: {m.batchId}</div>}
-                  {m.referenceId && <div>Ref: {m.referenceId}</div>}
+                <td style={{...td, verticalAlign: "top"}}>{formatDate(m.createdAt)}</td>
+                <td style={{...td, verticalAlign: "top"}}><span style={{ padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: "bold", ...getBadgeStyle(m.type) }}>{m.type.replace("_", " ")}</span></td>
+                
+                <td style={{...td, verticalAlign: "top"}}>
+                  <div style={{fontWeight: "600", color: "#1e293b", marginBottom: 4}}>{m.productName}</div>
+                  <div style={{fontSize: 12, color: "#64748b"}}>Logged By: {m.performedBy}</div>
                 </td>
-                <td style={{...td, color: "#475569", fontSize: 13}}>{m.performedBy}</td>
+                
+                <td style={{...td, verticalAlign: "top", fontWeight: "bold", color: m.type === "INWARD" || m.type === "RETURN" ? "#10b981" : "#ef4444"}}>
+                  {m.type === "INWARD" || m.type === "RETURN" ? "+" : "-"}{m.quantity}
+                </td>
+                
+                <td style={{...td, verticalAlign: "top"}}>
+                  {/* 🟢 NEW: Traceability Block */}
+                  {m.issuedBy || m.issuedTo || m.destination ? (
+                    <div style={{fontSize: 12, background: "#f8fafc", padding: 8, borderRadius: 6, border: "1px solid #e2e8f0"}}>
+                      {m.issuedBy && <div><b style={{color: "#475569"}}>From:</b> {m.issuedBy}</div>}
+                      {m.issuedTo && <div><b style={{color: "#475569"}}>To:</b> {m.issuedTo}</div>}
+                      {m.destination && <div><b style={{color: "#475569"}}>Dest:</b> {m.destination}</div>}
+                      {m.remarks && <div style={{marginTop: 4, color: "#64748b", fontStyle: "italic"}}>"{m.remarks}"</div>}
+                    </div>
+                  ) : (
+                    <div style={{ color: "#64748b", fontFamily: "monospace", fontSize: 12 }}>
+                      {m.batchId && <div>B: {m.batchId}</div>}
+                      {m.referenceId && <div>Ref: {m.referenceId}</div>}
+                      {m.remarks && <div style={{color: "#94a3b8", fontStyle: "italic", marginTop: 4}}>{m.remarks}</div>}
+                    </div>
+                  )}
+                </td>
+
               </tr>
             ))}
           </tbody>

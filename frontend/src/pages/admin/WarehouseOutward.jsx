@@ -12,6 +12,12 @@ export default function WarehouseOutward() {
   const [dateIssued, setDateIssued] = useState(new Date().toISOString().split('T')[0]); 
   const [purpose, setPurpose] = useState("Manual Adjustment");
   const [remarks, setRemarks] = useState("");
+
+  // 🟢 NEW MANDATORY TRACEABILITY FIELDS
+  const [issuedBy, setIssuedBy] = useState("");
+  const [issuedTo, setIssuedTo] = useState("");
+  const [destination, setDestination] = useState("");
+
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -28,7 +34,10 @@ export default function WarehouseOutward() {
 
   async function handleOutward(e) {
     e.preventDefault();
-    if (!selectedProduct || !qty || !dateIssued) return alert("Fill required fields.");
+    // 🟢 UPDATED VALIDATION
+    if (!selectedProduct || !qty || !dateIssued || !issuedBy || !issuedTo || !destination) {
+      return alert("Fill all required fields, including tracking information.");
+    }
 
     const targetProduct = products.find(p => p.id === selectedProduct);
     const currentStock = targetProduct.warehouseStock || 0;
@@ -48,6 +57,9 @@ export default function WarehouseOutward() {
         movementDate: Timestamp.fromDate(movementDate), 
         purpose: purpose,
         remarks: remarks || "",
+        issuedBy: issuedBy,       // 🟢 SAVING TRACEABILITY
+        issuedTo: issuedTo,       // 🟢 SAVING TRACEABILITY
+        destination: destination, // 🟢 SAVING TRACEABILITY
         orgId: orgId,
         performedBy: user.email,
         createdAt: serverTimestamp()
@@ -60,6 +72,7 @@ export default function WarehouseOutward() {
 
       alert("✅ Stock deducted!");
       setQty(""); setRemarks("");
+      setIssuedBy(""); setIssuedTo(""); setDestination("");
       loadProducts(); 
     } catch (err) {
       console.error(err);
@@ -79,7 +92,6 @@ export default function WarehouseOutward() {
           <form onSubmit={handleOutward} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
             <label style={label}>Date Issued * <input type="date" value={dateIssued} onChange={(e) => setDateIssued(e.target.value)} style={input} required /></label>
             
-            {/* 🟢 UPDATED DROPDOWN */}
             <label style={label}>
               Select Active Product *
               <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} style={input} required>
@@ -93,6 +105,7 @@ export default function WarehouseOutward() {
             </label>
 
             <label style={label}>Qty * <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={input} required /></label>
+            
             <label style={label}>Purpose *
               <select value={purpose} onChange={(e) => setPurpose(e.target.value)} style={input}>
                 <option value="Manual Adjustment">Manual Adjustment</option>
@@ -100,7 +113,16 @@ export default function WarehouseOutward() {
                 <option value="Damaged">Damaged</option>
               </select>
             </label>
-            <label style={label}>Remarks <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={input} rows="2" /></label>
+
+            {/* 🟢 NEW TRACEABILITY FIELDS */}
+            <div style={{ padding: 15, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 10 }}>
+               <h4 style={{ margin: 0, color: "#334155" }}>Traceability Details</h4>
+               <label style={label}>Issued By * <input type="text" value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} style={input} required placeholder="Name of person handing over" /></label>
+               <label style={label}>Issued To * <input type="text" value={issuedTo} onChange={(e) => setIssuedTo(e.target.value)} style={input} required placeholder="Name of person receiving" /></label>
+               <label style={label}>Destination / For Where * <input type="text" value={destination} onChange={(e) => setDestination(e.target.value)} style={input} required placeholder="e.g. Kiosk 3, Floor 2" /></label>
+            </div>
+
+            <label style={label}>General Remarks <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={input} rows="2" /></label>
 
             <button type="submit" disabled={loading} style={btnDanger}>{loading ? "Processing..." : "📤 Deduct Stock"}</button>
           </form>
@@ -109,7 +131,6 @@ export default function WarehouseOutward() {
         <div style={{ ...card, flex: 1, minWidth: 300, background: "#f8fafc" }}>
           <h3 style={{ marginTop: 0, color: "#334155" }}>Available Stock</h3>
           <div style={{ maxHeight: 400, overflowY: "auto" }}>
-            {/* 🟢 UPDATED LIST */}
             {products.map(p => (
               <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e2e8f0" }}>
                 <span style={{ fontSize: 14, fontWeight: "500" }}><span style={{color: "#0284c7", fontFamily: "monospace"}}>[{p.sku || "N/A"}]</span> {p.name}</span>

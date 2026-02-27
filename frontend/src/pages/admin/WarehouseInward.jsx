@@ -15,6 +15,12 @@ export default function WarehouseInward() {
   const [invoice, setInvoice] = useState("");
   const [supplier, setSupplier] = useState("");
   const [remarks, setRemarks] = useState("");
+  
+  // 🟢 NEW MANDATORY TRACEABILITY FIELDS
+  const [issuedBy, setIssuedBy] = useState("");
+  const [issuedTo, setIssuedTo] = useState("");
+  const [destination, setDestination] = useState("");
+  
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -22,21 +28,18 @@ export default function WarehouseInward() {
   }, [orgId]);
 
   async function loadCatalog() {
-    // 1. Get Master List
     const masterQ = query(collection(db, "master_products"), where("orgId", "==", orgId));
     const masterSnap = await getDocs(masterQ);
     
-    // 2. Get Current Stock from Products list
     const prodQ = query(collection(db, "products"), where("orgId", "==", orgId));
     const prodSnap = await getDocs(prodQ);
     const stockMap = {};
     prodSnap.docs.forEach(d => { stockMap[d.id] = d.data().warehouseStock || 0; });
 
-    // 3. Combine them (Now fetching SKU as well)
     const combined = masterSnap.docs.map(d => ({
       id: d.id,
       name: d.data().name,
-      sku: d.data().sku || "N/A", // 🟢 ADDED SKU
+      sku: d.data().sku || "N/A",
       currentStock: stockMap[d.id] || 0
     }));
     
@@ -46,7 +49,10 @@ export default function WarehouseInward() {
 
   async function handleInward(e) {
     e.preventDefault();
-    if (!selectedProduct || !qty || !dateReceived) return alert("Fill required fields.");
+    // 🟢 UPDATED VALIDATION
+    if (!selectedProduct || !qty || !dateReceived || !issuedBy || !issuedTo || !destination) {
+      return alert("Fill all required fields, including tracking information.");
+    }
 
     const targetProduct = masterProducts.find(p => p.id === selectedProduct);
     if (!window.confirm(`Add ${qty} units of [${targetProduct.sku}] ${targetProduct.name}?`)) return;
@@ -55,7 +61,6 @@ export default function WarehouseInward() {
     try {
       const movementDate = new Date(dateReceived);
 
-      // 1. Create Ledger Entry
       await addDoc(collection(db, "warehouse_movements"), {
         type: "INWARD",
         productId: targetProduct.id,
@@ -66,16 +71,18 @@ export default function WarehouseInward() {
         invoiceNumber: invoice || "N/A",
         supplier: supplier || "N/A",
         remarks: remarks || "",
+        issuedBy: issuedBy,       // 🟢 SAVING TRACEABILITY
+        issuedTo: issuedTo,       // 🟢 SAVING TRACEABILITY
+        destination: destination, // 🟢 SAVING TRACEABILITY
         orgId: orgId,
         performedBy: user.email,
         createdAt: serverTimestamp() 
       });
 
-      // 2. Upsert into active Products Collection
       const productRef = doc(db, "products", targetProduct.id);
       await setDoc(productRef, {
         name: targetProduct.name,
-        sku: targetProduct.sku, // 🟢 PASSING SKU TO ACTIVE PRODUCTS
+        sku: targetProduct.sku,
         orgId: orgId,
         warehouseStock: increment(Number(qty)),
         updatedAt: serverTimestamp()
@@ -83,6 +90,7 @@ export default function WarehouseInward() {
 
       alert("✅ Stock Received!");
       setQty(""); setBatchId(""); setInvoice(""); setSupplier(""); setRemarks("");
+      setIssuedBy(""); setIssuedTo(""); setDestination("");
       loadCatalog(); 
     } catch (err) {
       console.error(err);
@@ -100,10 +108,8 @@ export default function WarehouseInward() {
       <div style={{ display: "flex", gap: 30, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={card}>
           <form onSubmit={handleInward} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
-            
             <label style={label}>Date Received * <input type="date" value={dateReceived} onChange={(e) => setDateReceived(e.target.value)} style={input} required /></label>
-
-            {/* 🟢 UPDATED DROPDOWN */}
+            
             <label style={label}>
               Select Master Product *
               <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} style={input} required>
@@ -120,9 +126,18 @@ export default function WarehouseInward() {
               <label style={{...label, flex: 1}}>Batch / Lot # <input type="text" value={batchId} onChange={(e) => setBatchId(e.target.value)} style={input} /></label>
               <label style={{...label, flex: 1}}>Invoice # <input type="text" value={invoice} onChange={(e) => setInvoice(e.target.value)} style={input} /></label>
             </div>
-
+            
             <label style={label}>Supplier <input type="text" value={supplier} onChange={(e) => setSupplier(e.target.value)} style={input} /></label>
-            <label style={label}>Remarks <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={{...input, resize: "vertical"}} rows="2" /></label>
+
+            {/* 🟢 NEW TRACEABILITY FIELDS */}
+            <div style={{ padding: 15, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 10 }}>
+               <h4 style={{ margin: 0, color: "#334155" }}>Traceability Details</h4>
+               <label style={label}>Issued By * <input type="text" value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} style={input} required placeholder="Name of person handing over" /></label>
+               <label style={label}>Issued To * <input type="text" value={issuedTo} onChange={(e) => setIssuedTo(e.target.value)} style={input} required placeholder="Name of person receiving" /></label>
+               <label style={label}>Destination / For Where * <input type="text" value={destination} onChange={(e) => setDestination(e.target.value)} style={input} required placeholder="e.g. Main Warehouse Shelf A" /></label>
+            </div>
+
+            <label style={label}>General Remarks <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={{...input, resize: "vertical"}} rows="2" /></label>
 
             <button type="submit" disabled={loading} style={btnPrimary}>{loading ? "Processing..." : "💾 Record Inward"}</button>
           </form>
@@ -131,7 +146,6 @@ export default function WarehouseInward() {
         <div style={{ ...card, flex: 1, minWidth: 300, background: "#f8fafc" }}>
           <h3 style={{ marginTop: 0, color: "#334155" }}>Quick Stock View</h3>
           <div style={{ maxHeight: 400, overflowY: "auto" }}>
-            {/* 🟢 UPDATED LIST */}
             {masterProducts.map(p => (
               <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e2e8f0" }}>
                 <span style={{ fontSize: 14, fontWeight: "500" }}><span style={{color: "#0284c7", fontFamily: "monospace"}}>[{p.sku}]</span> {p.name}</span>

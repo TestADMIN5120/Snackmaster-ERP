@@ -131,12 +131,29 @@ export default function AdminMachineSlots() {
 
   function closeSlotEditor() { setEditingSlot(null); }
 
+  // 🟢 UPDATED: Strict Validation for Admin Slot Editing
   function handleEditingFieldChange(field, value) {
-    setEditingSlot((prev) => prev ? {
+    setEditingSlot((prev) => {
+      if (!prev) return prev;
+      
+      let parsedValue = value === "" ? "" : Number(value);
+
+      // Prevent negative numbers
+      if (typeof parsedValue === "number" && parsedValue < 0) {
+        parsedValue = 0;
+      }
+
+      // Prevent Current Qty from exceeding Capacity
+      if (field === "current_qty" && typeof parsedValue === "number") {
+        const cap = Number(prev.capacity) || 0;
+        if (parsedValue > cap) parsedValue = cap;
+      }
+
+      return {
         ...prev,
-        [field]: (field === "capacity" || field === "current_qty") 
-                 ? (value === "" ? "" : Number(value)) : value,
-    } : prev);
+        [field]: parsedValue,
+      };
+    });
   }
 
   async function saveEditingSlot() {
@@ -295,8 +312,31 @@ export default function AdminMachineSlots() {
                 {products.map((p) => <option key={p.id} value={p.id}>{labelForProduct(p)}</option>)}
               </select>
             </div>
-            <div style={field}><label style={{fontWeight: 'bold', fontSize: 13, marginBottom: 5}}>Capacity</label><input type="number" style={inputNumber} value={editingSlot.capacity} onChange={(e) => handleEditingFieldChange("capacity", e.target.value)} /></div>
-            <div style={field}><label style={{fontWeight: 'bold', fontSize: 13, marginBottom: 5}}>Current Qty</label><input type="number" style={inputNumber} value={editingSlot.current_qty} onChange={(e) => handleEditingFieldChange("current_qty", e.target.value)} /></div>
+            
+            {/* 🟢 UPDATED: Auto-select text on click and set min/max */}
+            <div style={field}>
+              <label style={{fontWeight: 'bold', fontSize: 13, marginBottom: 5}}>Capacity</label>
+              <input 
+                type="number" 
+                min="0"
+                style={inputNumber} 
+                value={editingSlot.capacity} 
+                onChange={(e) => handleEditingFieldChange("capacity", e.target.value)} 
+                onFocus={(e) => e.target.select()} 
+              />
+            </div>
+            <div style={field}>
+              <label style={{fontWeight: 'bold', fontSize: 13, marginBottom: 5}}>Current Qty</label>
+              <input 
+                type="number" 
+                min="0" 
+                max={editingSlot.capacity || 0}
+                style={inputNumber} 
+                value={editingSlot.current_qty} 
+                onChange={(e) => handleEditingFieldChange("current_qty", e.target.value)} 
+                onFocus={(e) => e.target.select()} 
+              />
+            </div>
             
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20 }}>
               <div style={{ display: "flex", gap: 8 }}>
@@ -326,7 +366,7 @@ const slotCodeText = { fontWeight: 800, fontSize: 16, color: "#0f172a", marginBo
 const btnBack = { padding: "8px 16px", border: "none", borderRadius: 8, background: "#f1f5f9", color: "#475569", cursor: "pointer", fontWeight: "bold" };
 const btnRed = { padding: "8px 16px", background: "#fee2e2", color: "#ef4444", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" };
 const btnBlue = { padding: "8px 16px", background: "#e0f2fe", color: "#3b82f6", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" };
-const btnGreen = { padding: "8px 16px", background: "#10b981", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }; // 🟢 NEW STYLE
+const btnGreen = { padding: "8px 16px", background: "#10b981", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }; 
 const btnTinyAdd = { padding: "6px 10px", fontSize: 12, borderRadius: 6, border: "1px dashed #cbd5e1", background: "#fff", color: "#64748b", cursor: "pointer", fontWeight: "bold" };
 
 // Modal Styles

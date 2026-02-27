@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Papa from "papaparse";
 import { 
-  collection, query, where, getDocs, doc, writeBatch, serverTimestamp, updateDoc, deleteDoc, setDoc // 🟢 ADDED setDoc HERE
+  collection, query, where, getDocs, doc, writeBatch, serverTimestamp, updateDoc, deleteDoc, setDoc 
 } from "firebase/firestore";
 import { db } from "../../../firebaseClient";
 import { useAdmin } from "../../../contexts/AdminContext";
@@ -26,10 +26,8 @@ export default function AdminSalesLedger() {
   const [batchTransactions, setBatchTransactions] = useState([]);
   const [loadingTxns, setLoadingTxns] = useState(false);
   
-  // Toggle between Active and Trash
   const [viewMode, setViewMode] = useState("active"); 
 
-  // 1️⃣ Fetch Machines
   useEffect(() => {
     if (!orgId) return;
     const fetchMachines = async () => {
@@ -40,7 +38,6 @@ export default function AdminSalesLedger() {
     fetchMachines();
   }, [orgId]);
 
-  // 2️⃣ Fetch Upload History Logs
   const fetchUploadLogs = async () => {
     if (!orgId) return;
     setLoadingLogs(true);
@@ -61,7 +58,6 @@ export default function AdminSalesLedger() {
     fetchUploadLogs();
   }, [orgId, uploadStats]);
 
-  // 3️⃣ Fetch Detailed Transactions
   const toggleBatchView = async (batchId) => {
     if (viewingBatch === batchId) {
         setViewingBatch(null);
@@ -87,7 +83,6 @@ export default function AdminSalesLedger() {
     }
   };
 
-  // --- PARSERS & CLEANERS ---
   function parseCSVDate(dateStr) {
     if (!dateStr) return null;
     try {
@@ -102,7 +97,7 @@ export default function AdminSalesLedger() {
     } catch (e) { return null; }
   }
 
-  // --- UPLOAD HANDLER ---
+  // 🟢 MASSIVELY UPGRADED UPLOAD HANDLER
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -121,23 +116,23 @@ export default function AdminSalesLedger() {
       complete: async (results) => {
         try {
           const rawData = results.data;
-          let validRecords = [];
-          let batchTotalRevenue = 0;
           let batchTotalRefunded = 0; 
           
+          // 🟢 1. IN-MEMORY GROUPING (Solves the Multi-Item Issue)
+          const groupedTxns = {};
+
           rawData.forEach(row => {
             const rawTxn = row["TxnID"] || row["txnId"] || "";
             const cleanTxnId = rawTxn.replace(/[^a-zA-Z0-9]/g, ''); 
             
             const amount = Number(row["Amount"] || 0);
-            const name = (row["Name"] || row["Product"] || "").trim().toLowerCase();
-            const slotId = (row["Selection"] || row["Slot"] || "").toString().trim().toLowerCase();
+            const name = (row["Name"] || row["Product"] || "Unknown").trim();
+            const slotId = (row["Selection"] || row["Slot"] || "").toString().trim();
             const rawDate = row["Date"] || row["Time"] || "";
-            
             const parsedDate = parseCSVDate(rawDate);
 
-            const isRefund = slotId.includes("refund") || slotId.includes("return") || 
-                             name.includes("refund") || name.includes("return") || 
+            const isRefund = slotId.toLowerCase().includes("refund") || slotId.toLowerCase().includes("return") || 
+                             name.toLowerCase().includes("refund") || name.toLowerCase().includes("return") || 
                              amount < 0;
 
             if (isRefund) {
@@ -147,32 +142,70 @@ export default function AdminSalesLedger() {
 
             if (amount <= 0 || !cleanTxnId) return;
 
-            validRecords.push({
-              txnId: cleanTxnId,
-              uploadBatchId: batchId, 
-              machineId: selectedMachine,
-              orgId: orgId,
-              amount: amount,
-              productName: row["Name"] || "Unknown", 
-              slotId: row["Selection"] || "",
-              dateISO: parsedDate ? parsedDate.toISOString() : null,
-              createdAt: serverTimestamp(),
-              deleted: false 
+            // If this is the first time seeing this TxnID, create the base record
+            if (!groupedTxns[cleanTxnId]) {
+               groupedTxns[cleanTxnId] = {
+                  txnId: cleanTxnId,
+                  uploadBatchId: batchId, 
+                  machineId: selectedMachine,
+                  orgId: orgId,
+                  amount: 0, // We will sum this up
+                  productName: name, 
+                  slotId: slotId,
+                  items: [], // Array to hold individual products
+                  dateISO: parsedDate ? parsedDate.toISOString() : null,
+                  createdAt: serverTimestamp(),
+                  deleted: false 
+               };
+            }
+
+            // Add the amount to the total transaction
+            groupedTxns[cleanTxnId].amount += amount;
+
+            // Push the specific item details to the items array
+            groupedTxns[cleanTxnId].items.push({
+               productName: name,
+               slotId: slotId,
+               price: amount,
+               qty: 1
             });
+
+            // If there are multiple items, update the top-level name for older UI compatibility
+            if (groupedTxns[cleanTxnId].items.length > 1) {
+               groupedTxns[cleanTxnId].productName = "Multiple Items";
+               groupedTxns[cleanTxnId].slotId = "Mixed";
+            }
           });
 
-          const existingSnap = await getDocs(query(collection(db, "sales_transactions"), where("orgId", "==", orgId), where("machineId", "==", selectedMachine)));
-          const existingTxnIds = new Set(existingSnap.docs.map(d => d.id));
+          const validRecords = Object.values(groupedTxns);
 
+          // 🟢 2. GLOBAL DEDUPLICATION (Checks whole org, not just machine)
+          const existingTxnIds = new Set();
+          const txnIdsToCheck = validRecords.map(r => r.txnId);
+          
+          // Query Firestore in batches of 10 to avoid limits and performance hits
+          for (let i = 0; i < txnIdsToCheck.length; i += 10) {
+            const chunk = txnIdsToCheck.slice(i, i + 10);
+            const q = query(
+                collection(db, "sales_transactions"), 
+                where("orgId", "==", orgId), 
+                where("txnId", "in", chunk)
+            );
+            const snap = await getDocs(q);
+            snap.docs.forEach(d => existingTxnIds.add(d.data().txnId));
+          }
+
+          let batchTotalRevenue = 0;
           const newRecords = validRecords.filter(r => {
-             if(existingTxnIds.has(r.txnId)) return false;
+             if (existingTxnIds.has(r.txnId)) return false; // Skip if already exists anywhere in org
              batchTotalRevenue += r.amount; 
              return true;
           });
 
+          // 🟢 3. SAVE DATA
           if (newRecords.length === 0 && batchTotalRefunded === 0) {
             setUploading(false);
-            setUploadStats({ total: rawData.length, added: 0, ignored: validRecords.length, refunded: 0 });
+            setUploadStats({ total: rawData.length, added: 0, ignored: rawData.length, refunded: 0 });
             return;
           }
 
@@ -216,7 +249,7 @@ export default function AdminSalesLedger() {
           setUploadStats({ 
               total: rawData.length, 
               added: newRecords.length, 
-              ignored: validRecords.length - newRecords.length,
+              ignored: rawData.length - newRecords.length, // Show total ignored from raw
               refundAmount: batchTotalRefunded
           });
           
@@ -234,21 +267,21 @@ export default function AdminSalesLedger() {
   };
 
   const downloadBatchCSV = async (batchId, mName, fDate, tDate) => {
-      const q = query(
-          collection(db, "sales_transactions"), 
-          where("orgId", "==", orgId),
-          where("uploadBatchId", "==", batchId)
-      );
+      const q = query(collection(db, "sales_transactions"), where("orgId", "==", orgId), where("uploadBatchId", "==", batchId));
       const snap = await getDocs(q);
       const data = snap.docs.map(d => {
           const t = d.data();
+          // Unroll multi-item names for the CSV export
+          const itemNames = t.items && t.items.length > 1 
+                ? t.items.map(i => `${i.productName} (${i.slotId})`).join(" + ") 
+                : t.productName;
+          
           return {
               "Date & Time": t.dateISO ? new Date(t.dateISO).toLocaleString('en-IN') : "Unknown",
               "Txn ID": t.txnId,
               "Machine": mName,
-              "Slot": t.slotId,
-              "Product Name": t.productName,
-              "Amount (Rs)": t.amount
+              "Items Purchased": itemNames,
+              "Total Amount (Rs)": t.amount
           }
       });
 
@@ -262,27 +295,22 @@ export default function AdminSalesLedger() {
       link.click();
   };
 
-  // 🟢 --- DELETION HANDLERS --- 
-
+  // --- DELETION HANDLERS --- 
   const handleSoftDelete = async (batchId) => {
       if (!window.confirm("Move this batch to trash?")) return;
       setLoadingLogs(true);
       try {
           await updateDoc(doc(db, "sales_upload_logs", batchId), { deleted: true });
-          
           const q = query(collection(db, "sales_transactions"), where("orgId", "==", orgId), where("uploadBatchId", "==", batchId));
           const snap = await getDocs(q);
-          
           let temp = [];
           snap.docs.forEach(d => temp.push(d.ref));
-          
           while(temp.length > 0) {
               const chunk = temp.splice(0, 500);
               const batch = writeBatch(db);
               chunk.forEach(ref => batch.update(ref, { deleted: true }));
               await batch.commit();
           }
-          
           setViewingBatch(null);
           await fetchUploadLogs();
       } catch (e) {
@@ -295,13 +323,10 @@ export default function AdminSalesLedger() {
       setLoadingLogs(true);
       try {
           await updateDoc(doc(db, "sales_upload_logs", batchId), { deleted: false });
-          
           const q = query(collection(db, "sales_transactions"), where("orgId", "==", orgId), where("uploadBatchId", "==", batchId));
           const snap = await getDocs(q);
-          
           let temp = [];
           snap.docs.forEach(d => temp.push(d.ref));
-          
           while(temp.length > 0) {
               const chunk = temp.splice(0, 500);
               const batch = writeBatch(db);
@@ -321,17 +346,14 @@ export default function AdminSalesLedger() {
       try {
           const q = query(collection(db, "sales_transactions"), where("orgId", "==", orgId), where("uploadBatchId", "==", batchId));
           const snap = await getDocs(q);
-          
           let temp = [];
           snap.docs.forEach(d => temp.push(d.ref));
-          
           while(temp.length > 0) {
               const chunk = temp.splice(0, 500);
               const batch = writeBatch(db);
               chunk.forEach(ref => batch.delete(ref));
               await batch.commit();
           }
-          
           await deleteDoc(doc(db, "sales_upload_logs", batchId));
           setViewingBatch(null);
           await fetchUploadLogs();
@@ -348,7 +370,6 @@ export default function AdminSalesLedger() {
       <h1 style={{ color: "#1e293b", marginBottom: 5 }}>🧾 Sales & Transaction Ledger</h1>
       <p style={{ color: "#64748b", marginBottom: 25 }}>Upload telemetry reports, track daily sales history, and generate tax invoices.</p>
 
-      {/* TOP CONTROL PANEL: FILE UPLOAD */}
       <div style={controlPanel}>
         <h3 style={{marginTop: 0, color: "#334155", marginBottom: 15}}>📤 Upload New Sales Report</h3>
         <div style={{ display: "flex", gap: 15, flexWrap: "wrap", alignItems: "flex-end" }}>
@@ -385,23 +406,21 @@ export default function AdminSalesLedger() {
         </div>
       </div>
 
-      {uploading && <div style={{...alertBox, background: "#e0f2fe", color: "#0369a1", borderColor: "#bae6fd"}}>⏳ Processing CSV, subtracting refunds, and saving batch...</div>}
+      {uploading && <div style={{...alertBox, background: "#e0f2fe", color: "#0369a1", borderColor: "#bae6fd"}}>⏳ Processing CSV, checking for global duplicates, and saving batch...</div>}
       
       {uploadStats && (
         <div style={{...alertBox, background: uploadStats.added > 0 ? "#f0fdf4" : "#fffbeb", color: uploadStats.added > 0 ? "#166534" : "#b45309", borderColor: uploadStats.added > 0 ? "#bbf7d0" : "#fcd34d"}}>
           <b>{uploadStats.added > 0 ? "✅ Upload Complete!" : "⚠️ No New Data Added"}</b><br/>
-          Processed Rows: {uploadStats.total} | <b>{uploadStats.added} New Transactions Saved.</b> <br/>
+          Processed Rows: {uploadStats.total} | <b>{uploadStats.added} New Unique Transactions Saved.</b> | {uploadStats.ignored} Ignored (Duplicates). <br/>
           {uploadStats.refundAmount > 0 && <span style={{color: "#ef4444", fontWeight: "bold", display:"block", marginTop: 4}}>📉 ₹{uploadStats.refundAmount} in Refunds successfully detected and subtracted!</span>}
         </div>
       )}
 
-      {/* UPLOAD HISTORY LEDGER */}
       <div style={tableCard}>
         <div style={{ padding: 20, borderBottom: "1px solid #e2e8f0", background: viewMode === "trash" ? "#fee2e2" : "#f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h3 style={{ margin: 0, color: viewMode === "trash" ? "#991b1b" : "#334155" }}>
             {viewMode === "trash" ? "🗑️ Trash Bin" : "🗄️ Upload History & Batch Reports"}
           </h3>
-          
           <button 
              onClick={() => { setViewMode(viewMode === "active" ? "trash" : "active"); setViewingBatch(null); }} 
              style={viewMode === "active" ? btnDangerOutline : btnPrimaryOutline}
@@ -444,7 +463,6 @@ export default function AdminSalesLedger() {
                     <td style={td}>{log.transactionCount}</td>
                     <td style={td}>
                       <div style={{display: "flex", gap: 10}}>
-                          
                           {viewMode === "active" ? (
                               <>
                                 <button onClick={() => toggleBatchView(log.id)} style={viewingBatch === log.id ? btnPrimaryActive : btnPrimary}>
@@ -461,7 +479,6 @@ export default function AdminSalesLedger() {
                                 <button onClick={() => handlePermanentDelete(log.id)} style={btnDangerSmall}>❌ Delete Forever</button>
                               </>
                           )}
-
                       </div>
                     </td>
                   </tr>
@@ -472,7 +489,6 @@ export default function AdminSalesLedger() {
         )}
       </div>
 
-      {/* DETAILED INVOICE VIEW */}
       {viewingBatch && (
         <div style={{...tableCard, marginTop: 20, border: "2px solid #3b82f6"}}>
           <div style={{ padding: 20, borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#eff6ff" }}>
@@ -487,12 +503,12 @@ export default function AdminSalesLedger() {
           ) : (
             <div style={{ overflowX: "auto", maxHeight: 500, overflowY: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead style={{ background: "#fff", color: "#475569", textAlign: "left", position: "sticky", top: 0 }}>
+                <thead style={{ background: "#fff", color: "#475569", textAlign: "left", position: "sticky", top: 0, zIndex: 1 }}>
                   <tr>
                     <th style={th}>Date & Time</th>
                     <th style={th}>Txn ID</th>
-                    <th style={th}>Product (Slot)</th>
-                    <th style={th}>Amount</th>
+                    <th style={th}>Purchased Items</th>
+                    <th style={th}>Total Paid</th>
                     <th style={th}>Action</th>
                   </tr>
                 </thead>
@@ -501,11 +517,27 @@ export default function AdminSalesLedger() {
                     const formattedDate = txn.dateISO ? new Date(txn.dateISO).toLocaleString('en-IN') : "Unknown Date";
                     return (
                       <tr key={txn.id} style={{ borderBottom: "1px solid #f1f5f9", opacity: txn.deleted ? 0.5 : 1 }}>
-                        <td style={td}>{formattedDate}</td>
-                        <td style={{...td, fontFamily: "monospace", color: "#64748b"}}>{txn.txnId}</td>
-                        <td style={{...td, fontWeight: "bold"}}>{txn.productName} <span style={{fontWeight:"normal", color:"#94a3b8", fontSize: 11}}>({txn.slotId})</span></td>
-                        <td style={{...td, color: "#16a34a", fontWeight: "bold"}}>₹{txn.amount.toFixed(2)}</td>
-                        <td style={td}>
+                        <td style={{...td, verticalAlign: "top"}}>{formattedDate}</td>
+                        <td style={{...td, fontFamily: "monospace", color: "#64748b", verticalAlign: "top"}}>{txn.txnId}</td>
+                        
+                        {/* 🟢 DYNAMIC MULTI-ITEM RENDERING */}
+                        <td style={{...td, verticalAlign: "top"}}>
+                          {txn.items && txn.items.length > 1 ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              <span style={{ fontWeight: "bold", color: "#0f172a" }}>Multiple Items</span>
+                              {txn.items.map((it, idx) => (
+                                <span key={idx} style={{ fontSize: 12, color: "#475569" }}>
+                                  - {it.productName} <span style={{color: "#94a3b8"}}>({it.slotId})</span> : ₹{it.price.toFixed(2)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{fontWeight: "bold"}}>{txn.productName} <span style={{fontWeight:"normal", color:"#94a3b8", fontSize: 11}}>({txn.slotId})</span></span>
+                          )}
+                        </td>
+
+                        <td style={{...td, color: "#16a34a", fontWeight: "bold", verticalAlign: "top"}}>₹{txn.amount.toFixed(2)}</td>
+                        <td style={{...td, verticalAlign: "top"}}>
                           <button onClick={() => generateInvoicePDF({ ...txn, date: formattedDate })} style={btnDownloadSmall}>
                             📄 Invoice
                           </button>
@@ -530,7 +562,7 @@ const labelStyle = { fontSize: 13, fontWeight: "bold", color: "#475569" };
 const inputStyle = { width: "100%", padding: 10, borderRadius: 8, border: "1px solid #cbd5e1", outline: "none", fontSize: 14, boxSizing: "border-box" };
 const alertBox = { padding: 15, borderRadius: 8, marginBottom: 20, fontSize: 14, border: "1px solid transparent" };
 const tableCard = { background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 4px 6px rgba(0,0,0,0.02)" };
-const th = { padding: "12px 20px", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5 };
+const th = { padding: "12px 20px", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5, borderBottom: "1px solid #e2e8f0" };
 const td = { padding: "12px 20px", color: "#334155" };
 
 const btnPrimary = { background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe", padding: "8px 12px", borderRadius: 6, fontWeight: "bold", cursor: "pointer", fontSize: 12, transition: "0.2s" };

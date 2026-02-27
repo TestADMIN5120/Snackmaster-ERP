@@ -11,6 +11,12 @@ export default function WarehouseExpired() {
   const [qty, setQty] = useState("");
   const [dateExpired, setDateExpired] = useState(new Date().toISOString().split('T')[0]);
   const [remarks, setRemarks] = useState("");
+
+  // 🟢 NEW MANDATORY TRACEABILITY FIELDS
+  const [issuedBy, setIssuedBy] = useState("");
+  const [issuedTo, setIssuedTo] = useState("");
+  const [destination, setDestination] = useState("");
+
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -27,25 +33,31 @@ export default function WarehouseExpired() {
 
   async function handleExpire(e) {
     e.preventDefault();
-    if (!selectedProduct || !qty || !dateExpired) return alert("Fill required fields.");
+    // 🟢 UPDATED VALIDATION
+    if (!selectedProduct || !qty || !dateExpired || !issuedBy || !issuedTo || !destination) {
+      return alert("Fill all required fields, including tracking information.");
+    }
 
     const targetProduct = products.find(p => p.id === selectedProduct);
     const currentStock = targetProduct.warehouseStock || 0;
 
     if (Number(qty) > currentStock) return alert(`Only ${currentStock} available in stock.`);
-    if (!window.confirm(`Remove ${qty} units of [${targetProduct.sku || 'N/A'}] ${targetProduct.name} as EXPIRED? This cannot be undone.`)) return;
+    if (!window.confirm(`Remove ${qty} units of [${targetProduct.sku || 'N/A'}] ${targetProduct.name} as EXPIRED/DAMAGED? This cannot be undone.`)) return;
     
     setLoading(true);
     try {
       const movementDate = new Date(dateExpired);
 
       await addDoc(collection(db, "warehouse_movements"), {
-        type: "EXPIRED",
+        type: "EXPIRED_DAMAGED", // 🟢 UPDATED TYPE TO COVER BOTH
         productId: targetProduct.id,
         productName: targetProduct.name,
         quantity: Number(qty),
         movementDate: Timestamp.fromDate(movementDate),
-        remarks: remarks || "Expired in warehouse",
+        remarks: remarks || "Expired / Damaged",
+        issuedBy: issuedBy,       // 🟢 SAVING TRACEABILITY
+        issuedTo: issuedTo,       // 🟢 SAVING TRACEABILITY
+        destination: destination, // 🟢 SAVING TRACEABILITY
         orgId: orgId,
         performedBy: user.email,
         createdAt: serverTimestamp()
@@ -56,8 +68,9 @@ export default function WarehouseExpired() {
         updatedAt: serverTimestamp()
       });
 
-      alert("✅ Expired stock removed from inventory!");
+      alert("✅ Expired/Damaged stock removed from inventory!");
       setQty(""); setRemarks("");
+      setIssuedBy(""); setIssuedTo(""); setDestination("");
       loadProducts(); 
     } catch (err) {
       console.error(err);
@@ -69,15 +82,15 @@ export default function WarehouseExpired() {
 
   return (
     <div style={{ maxWidth: 900 }}>
-      <h1 style={{ marginBottom: 5, color: "#1e293b" }}>⚠️ Manual Expiry</h1>
-      <p style={{ color: "#64748b", marginBottom: 30 }}>Mark active stock as expired or damaged. This will deduct it from available inventory.</p>
+      {/* 🟢 UPDATED TEXT TO COVER DAMAGED PRODUCTS */}
+      <h1 style={{ marginBottom: 5, color: "#1e293b" }}>⚠️ Manual Expiry / Damaged</h1>
+      <p style={{ color: "#64748b", marginBottom: 30 }}>Mark active stock as expired or physically damaged. This will deduct it from available inventory.</p>
 
       <div style={{ display: "flex", gap: 30, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={card}>
           <form onSubmit={handleExpire} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
             <label style={label}>Date Expired / Logged * <input type="date" value={dateExpired} onChange={(e) => setDateExpired(e.target.value)} style={input} required /></label>
             
-            {/* 🟢 UPDATED DROPDOWN */}
             <label style={label}>
               Select Active Product *
               <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} style={input} required>
@@ -90,17 +103,25 @@ export default function WarehouseExpired() {
               </select>
             </label>
 
-            <label style={label}>Qty Expired * <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={input} required /></label>
-            <label style={label}>Remarks <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={input} rows="2" placeholder="e.g. Found expired during audit..." /></label>
+            <label style={label}>Qty Expired / Damaged * <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={input} required /></label>
+            
+            {/* 🟢 NEW TRACEABILITY FIELDS */}
+            <div style={{ padding: 15, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 10 }}>
+               <h4 style={{ margin: 0, color: "#334155" }}>Traceability Details</h4>
+               <label style={label}>Reported By * <input type="text" value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} style={input} required placeholder="Name of person reporting damage" /></label>
+               <label style={label}>Processed By * <input type="text" value={issuedTo} onChange={(e) => setIssuedTo(e.target.value)} style={input} required placeholder="Name of admin processing removal" /></label>
+               <label style={label}>Destination / For Where * <input type="text" value={destination} onChange={(e) => setDestination(e.target.value)} style={input} required placeholder="e.g. Disposed in Bin 4" /></label>
+            </div>
 
-            <button type="submit" disabled={loading} style={btnDanger}>{loading ? "Processing..." : "⚠️ Mark as Expired"}</button>
+            <label style={label}>General Remarks <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={input} rows="2" placeholder="e.g. Found expired during audit, crushed box..." /></label>
+
+            <button type="submit" disabled={loading} style={btnDanger}>{loading ? "Processing..." : "⚠️ Mark as Expired / Damaged"}</button>
           </form>
         </div>
 
         <div style={{ ...card, flex: 1, minWidth: 300, background: "#f8fafc" }}>
           <h3 style={{ marginTop: 0, color: "#334155" }}>Current Stock</h3>
           <div style={{ maxHeight: 400, overflowY: "auto" }}>
-            {/* 🟢 UPDATED LIST */}
             {products.map(p => (
               <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e2e8f0" }}>
                 <span style={{ fontSize: 14, fontWeight: "500" }}><span style={{color: "#0284c7", fontFamily: "monospace"}}>[{p.sku || "N/A"}]</span> {p.name}</span>

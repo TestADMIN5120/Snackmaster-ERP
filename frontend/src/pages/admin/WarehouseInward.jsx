@@ -16,7 +16,11 @@ export default function WarehouseInward() {
   const [supplier, setSupplier] = useState("");
   const [remarks, setRemarks] = useState("");
   
-  // 🟢 NEW MANDATORY TRACEABILITY FIELDS
+  // 🟢 NEW: Barcode and Expiry State
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+
+  // TRACEABILITY FIELDS
   const [issuedBy, setIssuedBy] = useState("");
   const [issuedTo, setIssuedTo] = useState("");
   const [destination, setDestination] = useState("");
@@ -26,6 +30,21 @@ export default function WarehouseInward() {
   useEffect(() => {
     if (orgId) loadCatalog();
   }, [orgId]);
+
+  // 🟢 NEW: Auto-Calculate Expiry Date whenever Product or Received Date changes
+  useEffect(() => {
+    if (selectedProduct && dateReceived) {
+      const p = masterProducts.find(x => x.id === selectedProduct);
+      if (p && p.shelfLifeDays > 0) {
+        // Calculate future date based on shelf life
+        const d = new Date(dateReceived);
+        d.setDate(d.getDate() + p.shelfLifeDays);
+        setExpiryDate(d.toISOString().split('T')[0]);
+      } else {
+        setExpiryDate(""); // Clear if no shelf life is defined
+      }
+    }
+  }, [selectedProduct, dateReceived, masterProducts]);
 
   async function loadCatalog() {
     const masterQ = query(collection(db, "master_products"), where("orgId", "==", orgId));
@@ -40,6 +59,8 @@ export default function WarehouseInward() {
       id: d.id,
       name: d.data().name,
       sku: d.data().sku || "N/A",
+      barcode: d.data().barcode || "",          // 🟢 Fetching Barcode
+      shelfLifeDays: d.data().shelfLifeDays || 0, // 🟢 Fetching Shelf Life
       currentStock: stockMap[d.id] || 0
     }));
     
@@ -47,9 +68,25 @@ export default function WarehouseInward() {
     setMasterProducts(combined);
   }
 
+  // 🟢 NEW: Handle Barcode Scanner Input
+  function handleBarcodeKeyDown(e) {
+    if (e.key === "Enter") {
+      e.preventDefault(); // Stop form from submitting
+      const scannedCode = barcodeInput.trim();
+      if (!scannedCode) return;
+
+      const foundProduct = masterProducts.find(p => p.barcode === scannedCode);
+      if (foundProduct) {
+        setSelectedProduct(foundProduct.id);
+        setBarcodeInput(""); // Clear input ready for next scan (if you do multiple scans)
+      } else {
+        alert("Barcode not found in Master Catalog. Please select manually or update Master Data.");
+      }
+    }
+  }
+
   async function handleInward(e) {
     e.preventDefault();
-    // 🟢 UPDATED VALIDATION
     if (!selectedProduct || !qty || !dateReceived || !issuedBy || !issuedTo || !destination) {
       return alert("Fill all required fields, including tracking information.");
     }
@@ -60,6 +97,7 @@ export default function WarehouseInward() {
     setLoading(true);
     try {
       const movementDate = new Date(dateReceived);
+      const expDate = expiryDate ? new Date(expiryDate) : null;
 
       await addDoc(collection(db, "warehouse_movements"), {
         type: "INWARD",
@@ -67,13 +105,14 @@ export default function WarehouseInward() {
         productName: targetProduct.name,
         quantity: Number(qty),
         movementDate: Timestamp.fromDate(movementDate), 
+        expiryDate: expDate ? Timestamp.fromDate(expDate) : null, // 🟢 Save Expiry Date
         batchId: batchId || "N/A",
         invoiceNumber: invoice || "N/A",
         supplier: supplier || "N/A",
         remarks: remarks || "",
-        issuedBy: issuedBy,       // 🟢 SAVING TRACEABILITY
-        issuedTo: issuedTo,       // 🟢 SAVING TRACEABILITY
-        destination: destination, // 🟢 SAVING TRACEABILITY
+        issuedBy: issuedBy,       
+        issuedTo: issuedTo,       
+        destination: destination, 
         orgId: orgId,
         performedBy: user.email,
         createdAt: serverTimestamp() 
@@ -90,7 +129,8 @@ export default function WarehouseInward() {
 
       alert("✅ Stock Received!");
       setQty(""); setBatchId(""); setInvoice(""); setSupplier(""); setRemarks("");
-      setIssuedBy(""); setIssuedTo(""); setDestination("");
+      setIssuedBy(""); setIssuedTo(""); setDestination(""); setExpiryDate("");
+      setSelectedProduct(""); // Clear selection
       loadCatalog(); 
     } catch (err) {
       console.error(err);
@@ -108,6 +148,22 @@ export default function WarehouseInward() {
       <div style={{ display: "flex", gap: 30, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={card}>
           <form onSubmit={handleInward} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
+            
+            {/* 🟢 NEW: Barcode Scanner Section */}
+            <div style={{ background: "#f0f9ff", padding: 15, borderRadius: 8, border: "1px dashed #0284c7" }}>
+              <label style={{...label, color: "#0369a1"}}>
+                📷 Scan Barcode to Auto-Select (Optional)
+                <input 
+                  type="text" 
+                  value={barcodeInput} 
+                  onChange={(e) => setBarcodeInput(e.target.value)}
+                  onKeyDown={handleBarcodeKeyDown}
+                  style={{...input, borderColor: "#bae6fd"}} 
+                  placeholder="Click here and scan barcode..." 
+                />
+              </label>
+            </div>
+
             <label style={label}>Date Received * <input type="date" value={dateReceived} onChange={(e) => setDateReceived(e.target.value)} style={input} required /></label>
             
             <label style={label}>
@@ -120,7 +176,15 @@ export default function WarehouseInward() {
               </select>
             </label>
 
-            <label style={label}>Quantity Received * <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={input} required /></label>
+            <div style={{ display: "flex", gap: 15 }}>
+              <label style={{...label, flex: 1}}>Quantity Received * <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={input} required /></label>
+              
+              {/* 🟢 NEW: Expiration Date */}
+              <label style={{...label, flex: 1}}>
+                Expiration Date {expiryDate ? "✨ (Auto)" : ""}
+                <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} style={input} />
+              </label>
+            </div>
 
             <div style={{ display: "flex", gap: 15 }}>
               <label style={{...label, flex: 1}}>Batch / Lot # <input type="text" value={batchId} onChange={(e) => setBatchId(e.target.value)} style={input} /></label>
@@ -129,7 +193,6 @@ export default function WarehouseInward() {
             
             <label style={label}>Supplier <input type="text" value={supplier} onChange={(e) => setSupplier(e.target.value)} style={input} /></label>
 
-            {/* 🟢 NEW TRACEABILITY FIELDS */}
             <div style={{ padding: 15, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 10 }}>
                <h4 style={{ margin: 0, color: "#334155" }}>Traceability Details</h4>
                <label style={label}>Issued By * <input type="text" value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} style={input} required placeholder="Name of person handing over" /></label>

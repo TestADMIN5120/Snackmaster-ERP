@@ -18,12 +18,10 @@ export default function RefillerMachineSlots() {
   useEffect(() => {
     if (!machineId || !orgId) return;
 
-    // 🟢 Real-time listener for Machine Header
     const unsubMachine = onSnapshot(doc(db, "machines", machineId), (doc) => {
       if (doc.exists()) setMachine({ id: doc.id, ...doc.data() });
     });
 
-    // 🟢 Real-time listener for Slots (Admin Mirror)
     const q = query(collection(db, "machines", machineId, "slots"));
     const unsubSlots = onSnapshot(q, (snap) => {
       const sList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -34,7 +32,6 @@ export default function RefillerMachineSlots() {
     return () => { unsubMachine(); unsubSlots(); };
   }, [machineId, orgId]);
 
-  // --- MIRROR LOGIC ---
   const traysFromSlots = () => {
     const set = new Set();
     slots.forEach((s) => { if (s.tray != null) set.add(s.tray); });
@@ -50,9 +47,10 @@ export default function RefillerMachineSlots() {
     return [rootSlot, ...children];
   };
 
+  // 🟢 UPDATED: Math changed to display 0-9 format (110-119 instead of 111-120)
   const displayCodeRange = (rootSlot) => {
     const group = groupForRootSlot(rootSlot);
-    const codes = group.map((s) => 110 + (Number(s.tray) - 1) * 10 + Number(s.slot_number));
+    const codes = group.map((s) => 110 + (Number(s.tray) - 1) * 10 + (Number(s.slot_number) - 1));
     return group.length === 1 ? String(codes[0]) : `${Math.min(...codes)}-${Math.max(...codes)}`;
   };
 
@@ -61,7 +59,7 @@ export default function RefillerMachineSlots() {
     setSaving(true);
     try {
       await updateDoc(doc(db, "machines", machineId, "slots", editingSlot.id), {
-        current_qty: Number(editingSlot.current_qty) || 0,
+        current_qty: Math.max(0, Number(editingSlot.current_qty) || 0), // 🟢 Ensure no negative saves
         updatedAt: serverTimestamp(),
       });
       setEditingSlot(null);
@@ -106,7 +104,18 @@ export default function RefillerMachineSlots() {
             <p style={{fontSize: 14}}>Product: <b>{editingSlot.product_name}</b></p>
             <div style={{marginTop: 15}}>
               <label style={{display:'block', marginBottom: 5, fontSize: 12, fontWeight: 'bold'}}>Current Physical Count</label>
-              <input type="number" style={inputStyle} value={editingSlot.current_qty} onChange={e => setEditingSlot({...editingSlot, current_qty: e.target.value})} />
+              <input 
+                type="number" 
+                min="0"
+                style={inputStyle} 
+                value={editingSlot.current_qty} 
+                // 🟢 Prevent negative entry
+                onChange={e => {
+                  let val = Number(e.target.value);
+                  if (val < 0) val = 0;
+                  setEditingSlot({...editingSlot, current_qty: val})
+                }} 
+              />
             </div>
             <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button onClick={() => setEditingSlot(null)} style={btnCancel}>Cancel</button>

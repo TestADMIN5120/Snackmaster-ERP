@@ -129,7 +129,8 @@ export function generateMachineSlotPDF(machine, slots) {
   doc.setFontSize(16); doc.setTextColor(14, 165, 233); doc.text(`MACHINE SLOT CONFIGURATION - ${machine.name || "AUDIT"}`, 14, 45);
 
   const tableData = slots.map((s) => {
-    const code = 110 + (Number(s.tray) - 1) * 10 + Number(s.slot_number);
+    // 🟢 UPDATED: Math changed to display 0-9 format (110-119 instead of 111-120)
+    const code = 110 + (Number(s.tray) - 1) * 10 + (Number(s.slot_number) - 1);
     return [ String(code), s.product_name || "EMPTY", s.current_qty.toString(), s.capacity.toString(), `${Math.round((s.current_qty / s.capacity) * 100)}%` ];
   });
 
@@ -167,7 +168,6 @@ export function generateInvoicePDF(txn) {
   
   doc.text(`Transaction ID: ${txn.txnId}`, 14, 50);
   
-  // Format the date properly for the PDF
   const txnDate = txn.date?.seconds ? new Date(txn.date.seconds * 1000).toLocaleString("en-IN") : (txn.date || "Unknown Date");
   doc.text(`Date & Time: ${txnDate}`, 14, 56);
   
@@ -177,7 +177,6 @@ export function generateInvoicePDF(txn) {
   let tableData = [];
   let grandTotal = 0;
 
-  // 🟢 LOGIC: Check if it's a Multi-Item Transaction or Single
   if (txn.items && txn.items.length > 0) {
     txn.items.forEach(item => {
       const amount = Number(item.price) || 0;
@@ -188,7 +187,7 @@ export function generateInvoicePDF(txn) {
 
       tableData.push([
         `${item.productName} (${item.slotId})`,
-        "1", // Currently, the CSV parser treats each slot purchase as 1 qty
+        "1", 
         `Rs. ${basePrice.toFixed(2)}`,
         `Rs. ${cgst.toFixed(2)}`,
         `Rs. ${sgst.toFixed(2)}`,
@@ -196,7 +195,6 @@ export function generateInvoicePDF(txn) {
       ]);
     });
   } else {
-    // Fallback for older single-item transactions
     const totalAmount = Number(txn.amount) || 0;
     const basePrice = totalAmount / 1.05;
     const cgst = basePrice * 0.025;

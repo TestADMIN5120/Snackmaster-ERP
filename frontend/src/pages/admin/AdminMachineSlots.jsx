@@ -1,4 +1,3 @@
-// frontend/src/pages/admin/AdminMachineSlots.jsx
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -15,7 +14,6 @@ import {
 } from "firebase/firestore";
 import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
-// 🟢 IMPORT THE PDF GENERATOR
 import { generateMachineSlotPDF } from "../../utils/pdfGenerator"; 
 
 export default function AdminMachineSlots() {
@@ -25,7 +23,7 @@ export default function AdminMachineSlots() {
 
   const [machine, setMachine] = useState(null);
   const [slots, setSlots] = useState([]);
-  const [products, setProducts] = useState([]); // Stores Master Catalog items
+  const [products, setProducts] = useState([]); 
   const [loading, setLoading] = useState(true);
 
   const [editingSlot, setEditingSlot] = useState(null);
@@ -40,7 +38,6 @@ export default function AdminMachineSlots() {
   async function loadAll() {
     setLoading(true);
     try {
-      // 1) Load & Verify Machine Ownership
       const m = await getDoc(doc(db, "machines", machineId));
       if (!m.exists() || m.data().orgId !== orgId) {
           alert("Access Denied: Machine not found or belongs to another organization.");
@@ -49,11 +46,9 @@ export default function AdminMachineSlots() {
       }
       setMachine({ id: m.id, ...m.data() });
 
-      // 2) Load slots
       const snapSlots = await getDocs(collection(db, "machines", machineId, "slots"));
       setSlots(snapSlots.docs.map((d) => ({ id: d.id, ...d.data() })));
 
-      // 3) Load Master Catalog
       const masterQ = query(
         collection(db, "master_products"), 
         where("orgId", "==", orgId)
@@ -82,9 +77,10 @@ export default function AdminMachineSlots() {
     return slots.filter((s) => s.tray === tray && !s.merged_into).sort((a, b) => (a.slot_number || 0) - (b.slot_number || 0));
   }
 
+  // 🟢 UPDATED: This math now converts 1-10 into 0-9 for the display (e.g., 110-119)
   function displayCodeForSlot(slot) {
     if (!slot.tray || !slot.slot_number) return slot.id;
-    const code = 110 + (Number(slot.tray) - 1) * 10 + Number(slot.slot_number);
+    const code = 110 + (Number(slot.tray) - 1) * 10 + (Number(slot.slot_number) - 1);
     return String(code);
   }
 
@@ -114,7 +110,6 @@ export default function AdminMachineSlots() {
     return "";
   }
 
-  // 🟢 PDF DOWNLOAD ACTION
   const downloadSlotAudit = () => {
     if (!machine || slots.length === 0) return alert("No data to download");
     generateMachineSlotPDF(machine, slots);
@@ -131,19 +126,14 @@ export default function AdminMachineSlots() {
 
   function closeSlotEditor() { setEditingSlot(null); }
 
-  // 🟢 UPDATED: Strict Validation for Admin Slot Editing
   function handleEditingFieldChange(field, value) {
     setEditingSlot((prev) => {
       if (!prev) return prev;
       
       let parsedValue = value === "" ? "" : Number(value);
 
-      // Prevent negative numbers
-      if (typeof parsedValue === "number" && parsedValue < 0) {
-        parsedValue = 0;
-      }
+      if (typeof parsedValue === "number" && parsedValue < 0) parsedValue = 0;
 
-      // Prevent Current Qty from exceeding Capacity
       if (field === "current_qty" && typeof parsedValue === "number") {
         const cap = Number(prev.capacity) || 0;
         if (parsedValue > cap) parsedValue = cap;
@@ -207,6 +197,29 @@ export default function AdminMachineSlots() {
     } catch (e) { alert("Error regenerating slots."); }
   }
 
+  // 🟢 FIXED: Added missing handleAddSlot function
+  async function handleAddSlot(tray) {
+    const traySlots = slotsForTray(tray);
+    const maxSlot = traySlots.length > 0 ? Math.max(...traySlots.map(s => s.slot_number)) : 0;
+    
+    try {
+      await addDoc(collection(db, "machines", machineId, "slots"), {
+        tray: tray,
+        slot_number: maxSlot + 1,
+        capacity: 10,
+        current_qty: 0,
+        product_id: null,
+        product_name: "",
+        merged_into: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await loadAll();
+    } catch (err) {
+      alert("Error adding slot");
+    }
+  }
+
   async function handleMergeRight() {
     if (editingSlot.merged_into) return alert("Already merged.");
     const root = slots.find((s) => s.id === editingSlot.id);
@@ -253,7 +266,6 @@ export default function AdminMachineSlots() {
           <div style={{ display: "flex", justifyContent: "center", gap: 12, margin: "10px 0" }}>
             <button style={btnRed} onClick={() => deleteAllSlots(false)}>Delete All Slots</button>
             <button style={btnBlue} onClick={regenerateSlotsPrompt}>Regenerate Grid</button>
-            {/* 🟢 DOWNLOAD BUTTON */}
             <button style={btnGreen} onClick={downloadSlotAudit}>📥 Download Slot Data</button>
           </div>
         </div>
@@ -313,7 +325,6 @@ export default function AdminMachineSlots() {
               </select>
             </div>
             
-            {/* 🟢 UPDATED: Auto-select text on click and set min/max */}
             <div style={field}>
               <label style={{fontWeight: 'bold', fontSize: 13, marginBottom: 5}}>Capacity</label>
               <input 
@@ -369,7 +380,6 @@ const btnBlue = { padding: "8px 16px", background: "#e0f2fe", color: "#3b82f6", 
 const btnGreen = { padding: "8px 16px", background: "#10b981", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }; 
 const btnTinyAdd = { padding: "6px 10px", fontSize: 12, borderRadius: 6, border: "1px dashed #cbd5e1", background: "#fff", color: "#64748b", cursor: "pointer", fontWeight: "bold" };
 
-// Modal Styles
 const modalBackdrop = { position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.6)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 9999 };
 const modalBox = { background: "#fff", padding: 24, borderRadius: 16, width: 440, boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)" };
 const field = { marginBottom: 15, display: "flex", flexDirection: "column", gap: 6 };

@@ -85,10 +85,11 @@ export default function RefillerMachinePage() {
     return [rootSlot, ...slots.filter((s) => s.merged_into === rootSlot.id)];
   }
 
+  // 🟢 UPDATED: Math changed to display 0-9 format (110-119 instead of 111-120)
   function displayCodeRange(rootSlot) {
     const group = groupForRootSlot(rootSlot);
     const codes = group.map(
-      (s) => 110 + (Number(s.tray) - 1) * 10 + Number(s.slot_number)
+      (s) => 110 + (Number(s.tray) - 1) * 10 + (Number(s.slot_number) - 1)
     );
     return group.length === 1
       ? String(codes[0])
@@ -152,7 +153,6 @@ export default function RefillerMachinePage() {
     });
   }
 
-  // 🟢 UPDATED: Strict Validation for Refiller Audit
   const handleSlotQtyChange = (slot, newVal) => {
     let parsedVal = newVal === "" ? "" : Number(newVal);
 
@@ -350,7 +350,6 @@ export default function RefillerMachinePage() {
                           <div style={{fontWeight:'bold', fontSize: 15}}>{displayCodeRange(slot)}</div>
                           <div style={prodText}>{slot.product_name || "Empty"}</div>
                           
-                          {/* 🟢 UPDATED INPUT */}
                           <input 
                             type="number" 
                             min="0" 

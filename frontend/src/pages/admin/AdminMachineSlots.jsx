@@ -29,6 +29,9 @@ export default function AdminMachineSlots() {
   const [editingSlot, setEditingSlot] = useState(null);
   const [savingSlot, setSavingSlot] = useState(false);
   const [mergeBusy, setMergeBusy] = useState(false);
+  
+  // 🟢 NEW: State for Searchable Dropdown Text
+  const [productSearch, setProductSearch] = useState("");
 
   useEffect(() => {
     if (!machineId || !orgId) return;
@@ -56,7 +59,12 @@ export default function AdminMachineSlots() {
       const snapMaster = await getDocs(masterQ);
       const masterList = snapMaster.docs.map((d) => ({ id: d.id, ...d.data() }));
       
-      masterList.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      // 🟢 UPDATED: Alphanumeric sorting by SKU to match Master Catalog
+      masterList.sort((a, b) => {
+        const skuA = a.sku || "";
+        const skuB = b.sku || "";
+        return skuA.localeCompare(skuB, undefined, { numeric: true, sensitivity: 'base' });
+      });
       setProducts(masterList);
 
     } catch (e) {
@@ -77,7 +85,6 @@ export default function AdminMachineSlots() {
     return slots.filter((s) => s.tray === tray && !s.merged_into).sort((a, b) => (a.slot_number || 0) - (b.slot_number || 0));
   }
 
-  // 🟢 UPDATED: This math now converts 1-10 into 0-9 for the display (e.g., 110-119)
   function displayCodeForSlot(slot) {
     if (!slot.tray || !slot.slot_number) return slot.id;
     const code = 110 + (Number(slot.tray) - 1) * 10 + (Number(slot.slot_number) - 1);
@@ -116,32 +123,37 @@ export default function AdminMachineSlots() {
   };
 
   function openSlotEditor(slot) {
+    const pId = getSelectedProductId(slot);
+    const prod = products.find(p => p.id === pId);
+    
+    // 🟢 NEW: Set initial text for the searchable dropdown
+    setProductSearch(prod ? labelForProduct(prod) : "");
+    
     setEditingSlot({
       ...slot,
       capacity: slot.capacity ?? "",
       current_qty: slot.current_qty ?? "",
-      product_id: getSelectedProductId(slot),
+      product_id: pId,
     });
   }
 
-  function closeSlotEditor() { setEditingSlot(null); }
+  function closeSlotEditor() { 
+    setEditingSlot(null); 
+    setProductSearch(""); 
+  }
 
   function handleEditingFieldChange(field, value) {
     setEditingSlot((prev) => {
       if (!prev) return prev;
-      
       let parsedValue = value === "" ? "" : Number(value);
-
       if (typeof parsedValue === "number" && parsedValue < 0) parsedValue = 0;
-
       if (field === "current_qty" && typeof parsedValue === "number") {
         const cap = Number(prev.capacity) || 0;
         if (parsedValue > cap) parsedValue = cap;
       }
-
       return {
         ...prev,
-        [field]: parsedValue,
+        [field]: field === "product_id" ? value : parsedValue, // 🟢 Keep ID as string
       };
     });
   }
@@ -197,7 +209,6 @@ export default function AdminMachineSlots() {
     } catch (e) { alert("Error regenerating slots."); }
   }
 
-  // 🟢 FIXED: Added missing handleAddSlot function
   async function handleAddSlot(tray) {
     const traySlots = slotsForTray(tray);
     const maxSlot = traySlots.length > 0 ? Math.max(...traySlots.map(s => s.slot_number)) : 0;
@@ -317,12 +328,27 @@ export default function AdminMachineSlots() {
         <div style={modalBackdrop}>
           <div style={modalBox}>
             <h3 style={{ marginTop: 0 }}>Edit Slot {displayCodeRange(editingSlot)}</h3>
+            
+            {/* 🟢 UPDATED: Searchable Datalist Dropdown */}
             <div style={field}>
-              <label style={{fontWeight: 'bold', fontSize: 13, marginBottom: 5}}>Product (from Master Catalog)</label>
-              <select style={inputSelect} value={editingSlot.product_id || ""} onChange={(e) => handleEditingFieldChange("product_id", e.target.value)}>
-                <option value="">-- Empty slot --</option>
-                {products.map((p) => <option key={p.id} value={p.id}>{labelForProduct(p)}</option>)}
-              </select>
+              <label style={{fontWeight: 'bold', fontSize: 13, marginBottom: 5}}>Product (Type to Search)</label>
+              <input 
+                type="text" 
+                list="product-options" 
+                style={inputSelect} 
+                value={productSearch}
+                placeholder="Type SKU or Name... (Clear for empty)"
+                onChange={(e) => {
+                  setProductSearch(e.target.value);
+                  // Find if exact match exists, update underlying ID
+                  const matched = products.find(p => labelForProduct(p) === e.target.value);
+                  handleEditingFieldChange("product_id", matched ? matched.id : "");
+                }}
+                onFocus={(e) => e.target.select()}
+              />
+              <datalist id="product-options">
+                {products.map((p) => <option key={p.id} value={labelForProduct(p)} />)}
+              </datalist>
             </div>
             
             <div style={field}>

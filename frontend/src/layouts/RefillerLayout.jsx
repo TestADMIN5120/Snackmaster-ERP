@@ -22,7 +22,7 @@ export default function RefillerLayout() {
       {/* 🟢 TOP APP BAR (Mobile Friendly) */}
       <header style={topBar}>
         <div>
-          <h2 style={{ margin: 0, fontSize: "20px", color: "#fff", letterSpacing: 1 }}>Route Ops</h2>
+          <h2 style={{ margin: 0, fontSize: "20px", color: "#fff", letterSpacing: 1 }}>REFILLER PANEL</h2>
           <div style={{ fontSize: 12, color: "#90caf9" }}>{user?.email}</div>
         </div>
         <button onClick={handleLogout} style={logoutBtn}>Logout</button>

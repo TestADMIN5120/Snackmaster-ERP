@@ -18,24 +18,18 @@ import ProductFilterBar from "../../components/AdminProducts/ProductFilterBar";
 import ProductPagination from "../../components/AdminProducts/ProductPagination";
 import ProductTable from "../../components/AdminProducts/ProductTable";
 
-import AddProductModal from "../../components/AdminProducts/AddProductModal";
-import EditProductModal from "../../components/AdminProducts/EditProductModal";
-
 export default function AdminProducts() {
-  const { user, orgId } = useAdmin(); // 🟢 Use Secure Context
+  const { user, orgId } = useAdmin(); 
   const [products, setProducts] = useState([]);
 
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const [showAdd, setShowAdd] = useState(false);
-  const [editProduct, setEditProduct] = useState(null);
-
   useEffect(() => {
     if (!orgId) return;
 
-    // 🟢 SECURE LIVE QUERY: Only fetch products for THIS Org
+    // 🟢 SECURE LIVE QUERY: Fetch products for THIS Org (Mirrored from Master)
     const q = query(
         collection(db, "products"),
         where("orgId", "==", orgId)
@@ -63,7 +57,7 @@ export default function AdminProducts() {
     return list.sort((a, b) => {
       const skuA = (a.sku || "").toString().toLowerCase();
       const skuB = (b.sku || "").toString().toLowerCase();
-      return skuA.localeCompare(skuB, undefined, { numeric: true });
+      return skuA.localeCompare(skuB, undefined, { numeric: true, sensitivity: 'base' });
     });
 
   }, [products, search]);
@@ -74,20 +68,18 @@ export default function AdminProducts() {
   }, [filtered, currentPage, pageSize]);
 
   async function deleteProduct(id) {
-    if (!confirm("Delete this product? It will be removed from all slot configurations as well.")) return;
+    if (!window.confirm("⚠️ Please use the Master Catalog to delete or deactivate products. Do you still want to force delete this from the active list?")) return;
 
     try {
       await deleteDoc(doc(db, "products", id));
-
       await addDoc(collection(db, "admin_actions"), {
         actorEmail: user?.email || "unknown",
-        actionType: "delete_product",
+        actionType: "delete_product_forced",
         productId: id,
-        orgId: orgId, // 🟢 Audit trail isolation
+        orgId: orgId, 
         createdAt: serverTimestamp()
       });
-
-      alert("Product deleted.");
+      alert("Product forced deleted.");
     } catch (err) {
       console.error(err);
       alert("Delete failed.");
@@ -97,21 +89,27 @@ export default function AdminProducts() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1>Manage Products (Catalog)</h1>
-
-        <button style={btnGreen} onClick={() => setShowAdd(true)}>
-          + Add Product
-        </button>
+        <div>
+          <h1 style={{ margin: 0 }}>Active Warehouse Stock</h1>
+          <p style={{ margin: "5px 0 0 0", color: "#64748b", fontSize: 14 }}>
+            Only items set to "Active" in the Master Catalog appear here.
+          </p>
+        </div>
       </div>
 
       <ProductFilterBar search={search} setSearch={setSearch} />
 
       <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", border: "1px solid #e2e8f0" }}>
-        <ProductTable products={paged} onEdit={setEditProduct} onDelete={deleteProduct} />
+        {/* We pass a dummy onEdit because edits now happen in Master Catalog */}
+        <ProductTable 
+            products={paged} 
+            onEdit={() => alert("Please go to the 'Master Catalog' to edit product details.")} 
+            onDelete={deleteProduct} 
+        />
         
         {products.length === 0 && (
             <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>
-                Your catalog is empty. Add a product to get started.
+                No active products found. Go to Master Catalog to activate items.
             </div>
         )}
       </div>
@@ -123,14 +121,6 @@ export default function AdminProducts() {
         pageSize={pageSize}
         setPageSize={setPageSize}
       />
-
-      {/* 🟢 Ensure Add/Edit Modals know about orgId so they save data correctly */}
-      {showAdd && <AddProductModal onClose={() => setShowAdd(false)} orgId={orgId} user={user} />}
-      {editProduct && (
-        <EditProductModal product={editProduct} onClose={() => setEditProduct(null)} user={user} />
-      )}
     </div>
   );
 }
-
-const btnGreen = { padding: "10px 16px", background: "#10b981", border: "none", borderRadius: 8, color: "#fff", cursor: "pointer", fontWeight: "bold" };

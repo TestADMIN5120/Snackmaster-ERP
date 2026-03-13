@@ -8,12 +8,12 @@ export default function WarehouseOutward() {
   const [products, setProducts] = useState([]);
   
   const [selectedProduct, setSelectedProduct] = useState("");
+  const [productSearch, setProductSearch] = useState(""); // 🟢 NEW: Searchable Text
   const [qty, setQty] = useState("");
   const [dateIssued, setDateIssued] = useState(new Date().toISOString().split('T')[0]); 
   const [purpose, setPurpose] = useState("Manual Adjustment");
   const [remarks, setRemarks] = useState("");
 
-  // 🟢 NEW MANDATORY TRACEABILITY FIELDS
   const [issuedBy, setIssuedBy] = useState("");
   const [issuedTo, setIssuedTo] = useState("");
   const [destination, setDestination] = useState("");
@@ -28,15 +28,24 @@ export default function WarehouseOutward() {
     const q = query(collection(db, "products"), where("orgId", "==", orgId));
     const snap = await getDocs(q);
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    
+    // 🟢 UPDATED: Alphanumeric sorting by SKU
+    list.sort((a, b) => {
+      const skuA = (a.sku || "").toString().toLowerCase();
+      const skuB = (b.sku || "").toString().toLowerCase();
+      return skuA.localeCompare(skuB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+    
     setProducts(list);
   }
 
+  // 🟢 Helper for dropdown text
+  const getProductLabel = (p) => `[${p.sku || 'N/A'}] ${p.name} (Available: ${p.warehouseStock || 0})`;
+
   async function handleOutward(e) {
     e.preventDefault();
-    // 🟢 UPDATED VALIDATION
     if (!selectedProduct || !qty || !dateIssued || !issuedBy || !issuedTo || !destination) {
-      return alert("Fill all required fields, including tracking information.");
+      return alert("Fill all required fields, including tracking information. Make sure a valid product is selected.");
     }
 
     const targetProduct = products.find(p => p.id === selectedProduct);
@@ -57,9 +66,9 @@ export default function WarehouseOutward() {
         movementDate: Timestamp.fromDate(movementDate), 
         purpose: purpose,
         remarks: remarks || "",
-        issuedBy: issuedBy,       // 🟢 SAVING TRACEABILITY
-        issuedTo: issuedTo,       // 🟢 SAVING TRACEABILITY
-        destination: destination, // 🟢 SAVING TRACEABILITY
+        issuedBy: issuedBy,       
+        issuedTo: issuedTo,       
+        destination: destination, 
         orgId: orgId,
         performedBy: user.email,
         createdAt: serverTimestamp()
@@ -73,6 +82,7 @@ export default function WarehouseOutward() {
       alert("✅ Stock deducted!");
       setQty(""); setRemarks("");
       setIssuedBy(""); setIssuedTo(""); setDestination("");
+      setSelectedProduct(""); setProductSearch(""); // Clear selection
       loadProducts(); 
     } catch (err) {
       console.error(err);
@@ -92,16 +102,28 @@ export default function WarehouseOutward() {
           <form onSubmit={handleOutward} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
             <label style={label}>Date Issued * <input type="date" value={dateIssued} onChange={(e) => setDateIssued(e.target.value)} style={input} required /></label>
             
+            {/* 🟢 Searchable Datalist */}
             <label style={label}>
-              Select Active Product *
-              <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} style={input} required>
-                <option value="">-- Choose Item --</option>
+              Select Active Product (Search by SKU or Name) *
+              <input 
+                type="text" 
+                list="outward-products" 
+                value={productSearch}
+                onChange={(e) => {
+                  setProductSearch(e.target.value);
+                  const matched = products.find(p => getProductLabel(p) === e.target.value);
+                  setSelectedProduct(matched ? matched.id : "");
+                }}
+                onFocus={(e) => e.target.select()}
+                style={input} 
+                required 
+                placeholder="Type e.g. SM 101..."
+              />
+              <datalist id="outward-products">
                 {products.map(p => (
-                  <option key={p.id} value={p.id} disabled={(p.warehouseStock || 0) === 0}>
-                    [{p.sku || "N/A"}] {p.name} (Available: {p.warehouseStock || 0})
-                  </option>
+                  <option key={p.id} value={getProductLabel(p)} />
                 ))}
-              </select>
+              </datalist>
             </label>
 
             <label style={label}>Qty * <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={input} required /></label>
@@ -114,7 +136,6 @@ export default function WarehouseOutward() {
               </select>
             </label>
 
-            {/* 🟢 NEW TRACEABILITY FIELDS */}
             <div style={{ padding: 15, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 10 }}>
                <h4 style={{ margin: 0, color: "#334155" }}>Traceability Details</h4>
                <label style={label}>Issued By * <input type="text" value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} style={input} required placeholder="Name of person handing over" /></label>

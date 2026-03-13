@@ -9,6 +9,7 @@ export default function WarehouseInward() {
   
   // Form State
   const [selectedProduct, setSelectedProduct] = useState("");
+  const [productSearch, setProductSearch] = useState(""); // 🟢 NEW: State for searchable dropdown
   const [qty, setQty] = useState("");
   const [dateReceived, setDateReceived] = useState(new Date().toISOString().split('T')[0]);
   const [batchId, setBatchId] = useState("");
@@ -16,7 +17,7 @@ export default function WarehouseInward() {
   const [supplier, setSupplier] = useState("");
   const [remarks, setRemarks] = useState("");
   
-  // 🟢 NEW: Barcode and Expiry State
+  // Barcode and Expiry State
   const [barcodeInput, setBarcodeInput] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
 
@@ -31,17 +32,16 @@ export default function WarehouseInward() {
     if (orgId) loadCatalog();
   }, [orgId]);
 
-  // 🟢 NEW: Auto-Calculate Expiry Date whenever Product or Received Date changes
+  // Auto-Calculate Expiry Date whenever Product or Received Date changes
   useEffect(() => {
     if (selectedProduct && dateReceived) {
       const p = masterProducts.find(x => x.id === selectedProduct);
       if (p && p.shelfLifeDays > 0) {
-        // Calculate future date based on shelf life
         const d = new Date(dateReceived);
         d.setDate(d.getDate() + p.shelfLifeDays);
         setExpiryDate(d.toISOString().split('T')[0]);
       } else {
-        setExpiryDate(""); // Clear if no shelf life is defined
+        setExpiryDate(""); 
       }
     }
   }, [selectedProduct, dateReceived, masterProducts]);
@@ -55,32 +55,45 @@ export default function WarehouseInward() {
     const stockMap = {};
     prodSnap.docs.forEach(d => { stockMap[d.id] = d.data().warehouseStock || 0; });
 
-    const combined = masterSnap.docs.map(d => ({
-      id: d.id,
-      name: d.data().name,
-      sku: d.data().sku || "N/A",
-      barcode: d.data().barcode || "",          // 🟢 Fetching Barcode
-      shelfLifeDays: d.data().shelfLifeDays || 0, // 🟢 Fetching Shelf Life
-      currentStock: stockMap[d.id] || 0
-    }));
+    // 🟢 UPDATED: Filter out inactive products
+    const combined = masterSnap.docs
+      .filter(d => d.data().isActive !== false) 
+      .map(d => ({
+        id: d.id,
+        name: d.data().name,
+        sku: d.data().sku || "N/A",
+        barcode: d.data().barcode || "",          
+        shelfLifeDays: d.data().shelfLifeDays || 0, 
+        currentStock: stockMap[d.id] || 0
+      }));
     
-    combined.sort((a, b) => a.name.localeCompare(b.name));
+    // 🟢 UPDATED: Alphanumeric sorting by SKU
+    combined.sort((a, b) => {
+      const skuA = (a.sku || "").toString().toLowerCase();
+      const skuB = (b.sku || "").toString().toLowerCase();
+      return skuA.localeCompare(skuB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
     setMasterProducts(combined);
   }
 
-  // 🟢 NEW: Handle Barcode Scanner Input
+  // 🟢 NEW: Helper function to display product labels
+  const getProductLabel = (p) => `[${p.sku}] ${p.name}`;
+
+  // Handle Barcode Scanner Input
   function handleBarcodeKeyDown(e) {
     if (e.key === "Enter") {
-      e.preventDefault(); // Stop form from submitting
+      e.preventDefault(); 
       const scannedCode = barcodeInput.trim();
       if (!scannedCode) return;
 
       const foundProduct = masterProducts.find(p => p.barcode === scannedCode);
       if (foundProduct) {
         setSelectedProduct(foundProduct.id);
-        setBarcodeInput(""); // Clear input ready for next scan (if you do multiple scans)
+        setProductSearch(getProductLabel(foundProduct)); // Update searchable text box too
+        setBarcodeInput(""); 
       } else {
-        alert("Barcode not found in Master Catalog. Please select manually or update Master Data.");
+        alert("Barcode not found in Active Master Catalog. Please select manually or update Master Data.");
       }
     }
   }
@@ -88,7 +101,7 @@ export default function WarehouseInward() {
   async function handleInward(e) {
     e.preventDefault();
     if (!selectedProduct || !qty || !dateReceived || !issuedBy || !issuedTo || !destination) {
-      return alert("Fill all required fields, including tracking information.");
+      return alert("Fill all required fields, including tracking information. Make sure you selected a valid product from the dropdown.");
     }
 
     const targetProduct = masterProducts.find(p => p.id === selectedProduct);
@@ -105,7 +118,7 @@ export default function WarehouseInward() {
         productName: targetProduct.name,
         quantity: Number(qty),
         movementDate: Timestamp.fromDate(movementDate), 
-        expiryDate: expDate ? Timestamp.fromDate(expDate) : null, // 🟢 Save Expiry Date
+        expiryDate: expDate ? Timestamp.fromDate(expDate) : null,
         batchId: batchId || "N/A",
         invoiceNumber: invoice || "N/A",
         supplier: supplier || "N/A",
@@ -130,7 +143,8 @@ export default function WarehouseInward() {
       alert("✅ Stock Received!");
       setQty(""); setBatchId(""); setInvoice(""); setSupplier(""); setRemarks("");
       setIssuedBy(""); setIssuedTo(""); setDestination(""); setExpiryDate("");
-      setSelectedProduct(""); // Clear selection
+      setSelectedProduct(""); 
+      setProductSearch(""); // Clear Search
       loadCatalog(); 
     } catch (err) {
       console.error(err);
@@ -143,13 +157,12 @@ export default function WarehouseInward() {
   return (
     <div style={{ maxWidth: 900 }}>
       <h1 style={{ marginBottom: 5, color: "#1e293b" }}>📥 Inward Stock Receipt</h1>
-      <p style={{ color: "#64748b", marginBottom: 30 }}>Receive new stock based on the Master Product list.</p>
+      <p style={{ color: "#64748b", marginBottom: 30 }}>Receive new stock based on the Active Master Product list.</p>
 
       <div style={{ display: "flex", gap: 30, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={card}>
           <form onSubmit={handleInward} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
             
-            {/* 🟢 NEW: Barcode Scanner Section */}
             <div style={{ background: "#f0f9ff", padding: 15, borderRadius: 8, border: "1px dashed #0284c7" }}>
               <label style={{...label, color: "#0369a1"}}>
                 📷 Scan Barcode to Auto-Select (Optional)
@@ -166,20 +179,33 @@ export default function WarehouseInward() {
 
             <label style={label}>Date Received * <input type="date" value={dateReceived} onChange={(e) => setDateReceived(e.target.value)} style={input} required /></label>
             
+            {/* 🟢 UPDATED: Searchable Datalist Dropdown */}
             <label style={label}>
-              Select Master Product *
-              <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} style={input} required>
-                <option value="">-- Choose from Master Catalog --</option>
+              Select Master Product (Search by SKU or Name) *
+              <input 
+                type="text" 
+                list="inward-products" 
+                value={productSearch}
+                onChange={(e) => {
+                  setProductSearch(e.target.value);
+                  const matched = masterProducts.find(p => getProductLabel(p) === e.target.value);
+                  setSelectedProduct(matched ? matched.id : "");
+                }}
+                onFocus={(e) => e.target.select()}
+                style={input} 
+                required 
+                placeholder="Type e.g. SM 101 or Lays..."
+              />
+              <datalist id="inward-products">
                 {masterProducts.map(p => (
-                  <option key={p.id} value={p.id}>[{p.sku}] {p.name} (Current Stock: {p.currentStock})</option>
+                  <option key={p.id} value={getProductLabel(p)} />
                 ))}
-              </select>
+              </datalist>
             </label>
 
             <div style={{ display: "flex", gap: 15 }}>
               <label style={{...label, flex: 1}}>Quantity Received * <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={input} required /></label>
               
-              {/* 🟢 NEW: Expiration Date */}
               <label style={{...label, flex: 1}}>
                 Expiration Date {expiryDate ? "✨ (Auto)" : ""}
                 <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} style={input} />

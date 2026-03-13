@@ -8,12 +8,12 @@ export default function WarehouseReturns() {
   const [products, setProducts] = useState([]);
   
   const [selectedProduct, setSelectedProduct] = useState("");
+  const [productSearch, setProductSearch] = useState(""); // 🟢 NEW: Searchable Text
   const [qty, setQty] = useState("");
   const [dateReturned, setDateReturned] = useState(new Date().toISOString().split('T')[0]);
   const [machineId, setMachineId] = useState("");
   const [remarks, setRemarks] = useState("");
 
-  // 🟢 NEW MANDATORY TRACEABILITY FIELDS
   const [issuedBy, setIssuedBy] = useState("");
   const [issuedTo, setIssuedTo] = useState("");
   const [destination, setDestination] = useState("");
@@ -28,15 +28,24 @@ export default function WarehouseReturns() {
     const q = query(collection(db, "products"), where("orgId", "==", orgId));
     const snap = await getDocs(q);
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    
+    // 🟢 UPDATED: Alphanumeric sorting by SKU
+    list.sort((a, b) => {
+      const skuA = (a.sku || "").toString().toLowerCase();
+      const skuB = (b.sku || "").toString().toLowerCase();
+      return skuA.localeCompare(skuB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
     setProducts(list);
   }
 
+  // 🟢 Helper for dropdown text
+  const getProductLabel = (p) => `[${p.sku || 'N/A'}] ${p.name}`;
+
   async function handleReturn(e) {
     e.preventDefault();
-    // 🟢 UPDATED VALIDATION
     if (!selectedProduct || !qty || !dateReturned || !issuedBy || !issuedTo || !destination) {
-      return alert("Fill all required fields, including tracking information.");
+      return alert("Fill all required fields. Make sure a valid product is selected.");
     }
 
     const targetProduct = products.find(p => p.id === selectedProduct);
@@ -54,9 +63,9 @@ export default function WarehouseReturns() {
         movementDate: Timestamp.fromDate(movementDate),
         referenceId: machineId || "N/A",
         remarks: remarks || "Returned from field",
-        issuedBy: issuedBy,       // 🟢 SAVING TRACEABILITY
-        issuedTo: issuedTo,       // 🟢 SAVING TRACEABILITY
-        destination: destination, // 🟢 SAVING TRACEABILITY
+        issuedBy: issuedBy,       
+        issuedTo: issuedTo,       
+        destination: destination, 
         orgId: orgId,
         performedBy: user.email,
         createdAt: serverTimestamp()
@@ -70,6 +79,7 @@ export default function WarehouseReturns() {
       alert("✅ Returned stock added to warehouse!");
       setQty(""); setRemarks(""); setMachineId("");
       setIssuedBy(""); setIssuedTo(""); setDestination("");
+      setSelectedProduct(""); setProductSearch(""); // Clear Search
       loadProducts(); 
     } catch (err) {
       console.error(err);
@@ -89,20 +99,33 @@ export default function WarehouseReturns() {
           <form onSubmit={handleReturn} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
             <label style={label}>Date Returned * <input type="date" value={dateReturned} onChange={(e) => setDateReturned(e.target.value)} style={input} required /></label>
             
+            {/* 🟢 Searchable Datalist */}
             <label style={label}>
-              Select Active Product *
-              <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} style={input} required>
-                <option value="">-- Choose Item --</option>
+              Select Active Product (Search by SKU or Name) *
+              <input 
+                type="text" 
+                list="return-products" 
+                value={productSearch}
+                onChange={(e) => {
+                  setProductSearch(e.target.value);
+                  const matched = products.find(p => getProductLabel(p) === e.target.value);
+                  setSelectedProduct(matched ? matched.id : "");
+                }}
+                onFocus={(e) => e.target.select()}
+                style={input} 
+                required 
+                placeholder="Type e.g. SM 101..."
+              />
+              <datalist id="return-products">
                 {products.map(p => (
-                  <option key={p.id} value={p.id}>[{p.sku || "N/A"}] {p.name} (Current: {p.warehouseStock || 0})</option>
+                  <option key={p.id} value={getProductLabel(p)} />
                 ))}
-              </select>
+              </datalist>
             </label>
 
             <label style={label}>Qty Returned * <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={input} required /></label>
             <label style={label}>From Machine ID (Optional) <input type="text" value={machineId} onChange={(e) => setMachineId(e.target.value)} style={input} placeholder="e.g. SNACK-001" /></label>
 
-            {/* 🟢 NEW TRACEABILITY FIELDS */}
             <div style={{ padding: 15, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 10 }}>
                <h4 style={{ margin: 0, color: "#334155" }}>Traceability Details</h4>
                <label style={label}>Returned By * <input type="text" value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} style={input} required placeholder="Name of refiller returning stock" /></label>

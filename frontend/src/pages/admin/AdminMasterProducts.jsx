@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
 
@@ -8,7 +8,6 @@ export default function AdminMasterProducts() {
   const [masterList, setMasterList] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 🟢 NEW: State to track if we are Editing an existing product
   const [editingId, setEditingId] = useState(null);
 
   // Form State
@@ -36,7 +35,6 @@ export default function AdminMasterProducts() {
       const snap = await getDocs(q);
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       
-      // 🟢 UPDATED: Alphanumeric sorting by SKU (so SM 2 comes before SM 10)
       list.sort((a, b) => {
         const skuA = a.sku || "";
         const skuB = b.sku || "";
@@ -65,7 +63,6 @@ export default function AdminMasterProducts() {
     setBarcode(""); setShelfLifeDays("");
   }
 
-  // 🟢 NEW: Populate the form when Admin clicks "Edit"
   function handleEditClick(product) {
     setEditingId(product.id);
     setSku(product.sku || "");
@@ -80,16 +77,46 @@ export default function AdminMasterProducts() {
     setCostWithoutGst(product.costWithoutGst || "");
     setBarcode(product.barcode || "");
     setShelfLifeDays(product.shelfLifeDays || "");
-    
-    // Smooth scroll to top of page
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // 🟢 UPDATED: Toggle Status and instantly sync to Active Products Collection
+  async function handleToggleActive(product) {
+    const newStatus = product.isActive === false ? true : false; 
+    if (!window.confirm(`Mark this product as ${newStatus ? 'ACTIVE' : 'INACTIVE'}?`)) return;
+    
+    try {
+      // 1. Update Master Catalog
+      await updateDoc(doc(db, "master_products", product.id), {
+        isActive: newStatus,
+        updatedAt: serverTimestamp()
+      });
+
+      // 2. Sync to Active Products Database
+      if (newStatus === true) {
+          // Add back to active products
+          await setDoc(doc(db, "products", product.id), {
+              name: product.name,
+              sku: product.sku,
+              orgId: orgId,
+              updatedAt: serverTimestamp()
+          }, { merge: true }); // Merge keeps existing warehouseStock if it was previously 0
+      } else {
+          // Remove from active products
+          await deleteDoc(doc(db, "products", product.id));
+      }
+
+      loadMasterProducts();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update status.");
+    }
   }
 
   async function handleSave(e) {
     e.preventDefault();
     if (!name.trim() || !sku.trim()) return alert("Product Name and SKU are required.");
 
-    // 🟢 NEW: Enforce SKU Uniqueness across the org
     const cleanSku = sku.trim();
     const isDuplicate = masterList.some(p => p.sku.toLowerCase() === cleanSku.toLowerCase() && p.id !== editingId);
     if (isDuplicate) {
@@ -115,14 +142,34 @@ export default function AdminMasterProducts() {
       };
 
       if (editingId) {
-          // Update Existing Product
+          // 1. Update Master
           await updateDoc(doc(db, "master_products", editingId), payload);
+          
+          // 2. Sync Name/SKU changes to Active Products (if it is currently active)
+          const existingProd = masterList.find(p => p.id === editingId);
+          if (existingProd && existingProd.isActive !== false) {
+              await setDoc(doc(db, "products", editingId), {
+                  name: payload.name,
+                  sku: payload.sku,
+                  updatedAt: serverTimestamp()
+              }, { merge: true });
+          }
           alert("✅ Product Updated Successfully");
       } else {
-          // Create New Product
+          // 1. Create New Master
           payload.createdAt = serverTimestamp();
-          await addDoc(collection(db, "master_products"), payload);
-          alert("✅ Added to Master Catalog");
+          payload.isActive = true; 
+          const docRef = await addDoc(collection(db, "master_products"), payload);
+          
+          // 2. Push to Active Products automatically
+          await setDoc(doc(db, "products", docRef.id), {
+              name: payload.name,
+              sku: payload.sku,
+              orgId: orgId,
+              warehouseStock: 0,
+              createdAt: serverTimestamp()
+          });
+          alert("✅ Added to Master Catalog & Active List");
       }
       
       resetForm();
@@ -134,9 +181,10 @@ export default function AdminMasterProducts() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm("Delete this from Master Catalog? (This won't delete existing physical stock)")) return;
+    if (!window.confirm("Delete this from Master Catalog? This will completely remove it from the Active Products list too.")) return;
     try {
       await deleteDoc(doc(db, "master_products", id));
+      await deleteDoc(doc(db, "products", id)); // Clean up from active products
       loadMasterProducts();
     } catch (err) {
       console.error(err);
@@ -148,7 +196,6 @@ export default function AdminMasterProducts() {
       <h1 style={{ marginBottom: 5, color: "#1e293b" }}>📖 Master Product Data</h1>
       <p style={{ color: "#64748b", marginBottom: 30 }}>Define your core financial and catalog attributes. This data populates everywhere else.</p>
 
-      {/* 🟢 UPDATED: ADD / EDIT FORM GRID */}
       <div style={{ ...card, marginBottom: 30, border: editingId ? "2px solid #3b82f6" : "1px solid #e2e8f0" }}>
         <h3 style={{ marginTop: 0, marginBottom: 20, color: editingId ? "#1d4ed8" : "#1e293b" }}>
             {editingId ? "✏️ Edit Product Data" : "➕ Add New Item to Master Data"}
@@ -199,12 +246,12 @@ export default function AdminMasterProducts() {
         <h3 style={{ marginTop: 0, marginBottom: 15 }}>Master Catalog List</h3>
         {loading ? <p>Loading...</p> : (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 800 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 900 }}>
               <thead>
                 <tr style={{ background: "#f8fafc", textAlign: "left", color: "#64748b" }}>
                   <th style={th}>SKU & Barcode</th>
                   <th style={th}>Product Name</th>
-                  <th style={th}>Category / Brand</th>
+                  <th style={th}>Status</th> 
                   <th style={th}>MRP ₹</th>
                   <th style={th}>Cost (+GST) ₹</th>
                   <th style={th}>Shelf Life</th>
@@ -212,27 +259,46 @@ export default function AdminMasterProducts() {
                 </tr>
               </thead>
               <tbody>
-                {masterList.map(p => (
-                  <tr key={p.id} style={{ borderBottom: "1px solid #f1f5f9", background: editingId === p.id ? "#eff6ff" : "transparent" }}>
-                    <td style={{...td, fontFamily: "monospace"}}>
-                      <div style={{color: "#0284c7", fontWeight: "bold"}}>{p.sku}</div>
-                      {p.barcode && <div style={{fontSize: 11, color: "#64748b"}}>BC: {p.barcode}</div>}
-                    </td>
-                    <td style={{...td, fontWeight: "bold"}}>{p.name} <span style={{fontSize: 11, color: "#94a3b8", marginLeft: 5}}>({p.unitSize})</span></td>
-                    <td style={td}>{p.category} <br/><span style={{fontSize: 11, color: "#64748b"}}>{p.brand}</span></td>
-                    <td style={{...td, fontWeight: "bold", color: "#16a34a"}}>{p.mrp}</td>
-                    <td style={td}>{p.costWithGst}</td>
-                    <td style={td}>
-                      {p.shelfLifeDays ? <span style={{background: "#e0f2fe", color: "#0369a1", padding: "2px 6px", borderRadius: 4, fontSize: 11, fontWeight: "bold"}}>{p.shelfLifeDays} Days</span> : <span style={{color: "#cbd5e1"}}>N/A</span>}
-                    </td>
-                    <td style={td}>
-                      <div style={{ display: "flex", gap: 8 }}>
-                          <button onClick={() => handleEditClick(p)} style={btnEditGhost}>Edit</button>
-                          <button onClick={() => handleDelete(p.id)} style={btnDangerGhost}>Del</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {masterList.map(p => {
+                  const isActive = p.isActive !== false; // True by default
+                  return (
+                    <tr key={p.id} style={{ borderBottom: "1px solid #f1f5f9", background: editingId === p.id ? "#eff6ff" : (isActive ? "transparent" : "#fef2f2") }}>
+                      <td style={{...td, fontFamily: "monospace"}}>
+                        <div style={{color: "#0284c7", fontWeight: "bold", textDecoration: isActive ? "none" : "line-through"}}>{p.sku}</div>
+                        {p.barcode && <div style={{fontSize: 11, color: "#64748b"}}>BC: {p.barcode}</div>}
+                      </td>
+                      <td style={{...td, fontWeight: "bold", color: isActive ? "#0f172a" : "#94a3b8"}}>{p.name} <span style={{fontSize: 11, color: "#94a3b8", marginLeft: 5}}>({p.unitSize})</span></td>
+                      
+                      <td style={td}>
+                        <span style={{
+                            padding: "4px 8px", borderRadius: 4, fontSize: 11, fontWeight: "bold",
+                            background: isActive ? "#dcfce7" : "#fee2e2",
+                            color: isActive ? "#166534" : "#991b1b"
+                        }}>
+                            {isActive ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+
+                      <td style={{...td, fontWeight: "bold", color: isActive ? "#16a34a" : "#94a3b8"}}>{p.mrp}</td>
+                      <td style={{...td, color: isActive ? "#0f172a" : "#94a3b8"}}>{p.costWithGst}</td>
+                      <td style={td}>
+                        {p.shelfLifeDays ? <span style={{background: "#e0f2fe", color: "#0369a1", padding: "2px 6px", borderRadius: 4, fontSize: 11, fontWeight: "bold"}}>{p.shelfLifeDays} Days</span> : <span style={{color: "#cbd5e1"}}>N/A</span>}
+                      </td>
+                      <td style={td}>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button onClick={() => handleEditClick(p)} style={btnEditGhost}>Edit</button>
+                            
+                            {/* 🟢 NEW: Toggle Button passes the whole product object */}
+                            <button onClick={() => handleToggleActive(p)} style={isActive ? btnWarningGhost : btnSuccessGhost}>
+                                {isActive ? "Deactivate" : "Activate"}
+                            </button>
+                            
+                            <button onClick={() => handleDelete(p.id)} style={btnDangerGhost}>Del</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -251,5 +317,7 @@ const btnPrimaryEdit = { padding: "14px 20px", background: "#2563eb", color: "#f
 const btnCancel = { padding: "14px 20px", background: "#f1f5f9", color: "#475569", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" };
 const btnDangerGhost = { padding: "6px 12px", background: "#fef2f2", color: "#ef4444", border: "1px solid #fecaca", borderRadius: 6, cursor: "pointer", fontWeight: "bold", fontSize: 12 };
 const btnEditGhost = { padding: "6px 12px", background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: 6, cursor: "pointer", fontWeight: "bold", fontSize: 12 };
+const btnWarningGhost = { padding: "6px 12px", background: "#fffbeb", color: "#d97706", border: "1px solid #fde68a", borderRadius: 6, cursor: "pointer", fontWeight: "bold", fontSize: 12 };
+const btnSuccessGhost = { padding: "6px 12px", background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0", borderRadius: 6, cursor: "pointer", fontWeight: "bold", fontSize: 12 };
 const th = { padding: "12px", borderBottom: "1px solid #e2e8f0" };
 const td = { padding: "12px" };

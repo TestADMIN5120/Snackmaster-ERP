@@ -10,7 +10,7 @@ export default function WarehouseDashboard() {
   
   // Data States
   const [movements, setMovements] = useState([]);
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState([]); // Restored products state
 
   // Section 1: Movements UI State
   const [activeTab, setActiveTab] = useState("INWARD");
@@ -19,7 +19,7 @@ export default function WarehouseDashboard() {
   const [endDate, setEndDate] = useState("");
   const [movPage, setMovPage] = useState(1);
 
-  // Section 2: Current Stock UI State
+  // Section 2: Current Stock UI State (Restored)
   const [stockSearch, setStockSearch] = useState("");
   const [stockPage, setStockPage] = useState(1);
 
@@ -37,7 +37,7 @@ export default function WarehouseDashboard() {
       const movSnap = await getDocs(movQ);
       setMovements(movSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-      // Fetch Current Stock
+      // Fetch Current Stock (Restored)
       const prodQ = query(collection(db, "products"), where("orgId", "==", orgId));
       const prodSnap = await getDocs(prodQ);
       setProducts(prodSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -79,10 +79,15 @@ export default function WarehouseDashboard() {
     });
   }, [movements, activeTab, movSearch, startDate, endDate]);
 
+  // 🟢 UPDATED: Alphanumeric SKU sorting applied to Active Stock!
   const filteredStock = useMemo(() => {
     return products
       .filter(p => (p.name || "").toLowerCase().includes(stockSearch.toLowerCase()))
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      .sort((a, b) => {
+        const skuA = (a.sku || "").toString().toLowerCase();
+        const skuB = (b.sku || "").toString().toLowerCase();
+        return skuA.localeCompare(skuB, undefined, { numeric: true, sensitivity: 'base' });
+      });
   }, [products, stockSearch]);
 
   // --- PAGINATION LOGIC ---
@@ -131,7 +136,7 @@ export default function WarehouseDashboard() {
           <TabButton active={activeTab === "INWARD"} onClick={() => {setActiveTab("INWARD"); setMovPage(1);}} icon="📥" label="Inward Products" color="#10b981" />
           <TabButton active={activeTab === "OUTWARD"} onClick={() => {setActiveTab("OUTWARD"); setMovPage(1);}} icon="📤" label="Outward Products" color="#3b82f6" />
           <TabButton active={activeTab === "RETURN"} onClick={() => {setActiveTab("RETURN"); setMovPage(1);}} icon="🔄" label="Returned Stock" color="#eab308" />
-          <TabButton active={activeTab === "EXPIRED"} onClick={() => {setActiveTab("EXPIRED"); setMovPage(1);}} icon="⚠️" label="Expired Stock" color="#ef4444" />
+          <TabButton active={activeTab === "EXPIRED_DAMAGED"} onClick={() => {setActiveTab("EXPIRED_DAMAGED"); setMovPage(1);}} icon="⚠️" label="Expired/Damaged" color="#ef4444" />
         </div>
 
         {/* FILTERS */}
@@ -162,7 +167,7 @@ export default function WarehouseDashboard() {
                   <td style={{...td, fontWeight: "bold"}}>{m.productName}</td>
                   <td style={td}>
                     <span style={{ fontWeight: "bold", color: activeTab==="INWARD" || activeTab==="RETURN" ? "#16a34a" : "#dc2626" }}>
-                      {m.quantity}
+                      {activeTab==="INWARD" || activeTab==="RETURN" ? "+" : "-"}{m.quantity}
                     </span>
                   </td>
                   <td style={{...td, color: "#64748b"}}>{m.referenceId || m.remarks || "-"}</td>
@@ -185,7 +190,7 @@ export default function WarehouseDashboard() {
       </div>
 
       {/* ==========================================
-          SECTION 2: CURRENT STOCK OVERVIEW
+          SECTION 2: CURRENT STOCK OVERVIEW (RESTORED & SORTED)
       ========================================== */}
       <div style={{ ...card, marginTop: 30 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #e2e8f0", paddingBottom: 15, marginBottom: 20 }}>

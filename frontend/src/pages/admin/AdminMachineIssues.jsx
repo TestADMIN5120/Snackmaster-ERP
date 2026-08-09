@@ -1,0 +1,154 @@
+import React, { useEffect, useState } from "react";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  updateDoc,
+  doc,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db } from "../../firebaseClient";
+import { useAdmin } from "../../contexts/AdminContext"; 
+
+export default function AdminMachineIssues() {
+  const { orgId, user } = useAdmin(); 
+  const [issues, setIssues] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!orgId) return;
+
+    const q = query(collection(db, "machine_issues"), where("orgId", "==", orgId));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+      
+      setIssues(data);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [orgId]);
+
+  async function updateIssueStatus(issueId, machineId, newStatus) {
+    if (!window.confirm(`Update status to: ${newStatus.replace("_", " ").toUpperCase()}?`)) return;
+
+    try {
+      const updateData = { status: newStatus, updatedAt: serverTimestamp() };
+
+      if (newStatus === "acknowledged") updateData.acknowledgedAt = serverTimestamp();
+      if (newStatus === "resolved") {
+        updateData.resolvedAt = serverTimestamp();
+        updateData.resolvedBy = user.email; 
+      }
+
+      await updateDoc(doc(db, "machine_issues", issueId), updateData);
+
+      if (newStatus === "resolved") {
+        await updateDoc(doc(db, "machines", machineId), {
+          status: "active",
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+    } catch (err) {
+      console.error("❌ Failed to update issue", err);
+      alert("Error updating status");
+    }
+  }
+
+  if (loading) return <div style={{ padding: 24 }}>Loading issues...</div>;
+
+  return (
+    <div style={{ padding: 24 }}>
+      <h1 style={{ marginBottom: 20 }}>🚨 Machine Issues (Live)</h1>
+
+      {issues.length === 0 && (
+        <div style={{ marginTop: 20, color: "#777", textAlign: "center", padding: 40, background: "#fff", borderRadius: 8 }}>
+          <h3>No issues reported 🎉</h3>
+          <p>All machines are running smoothly.</p>
+        </div>
+      )}
+
+      {issues.map((issue) => (
+        <div key={issue.id} style={card}>
+          <div style={cardHeader}>
+            <div>
+                {/* 🟢 NEW: Shows the machine name provided by Refiller payload */}
+                <h3 style={{ margin: "0 0 5px 0" }}>{issue.machineName || "Unknown Machine"}</h3>
+                <div style={{ fontSize: 12, color: "#666", marginBottom: 5 }}>ID: {issue.machineId}</div>
+                <span style={{ fontSize: 12, color: "#666" }}>
+                    Reported: {issue.createdAt?.toDate ? issue.createdAt.toDate().toLocaleString() : "Just now"}
+                </span>
+                
+                {issue.offline && (
+                  <span style={{marginLeft: 10, fontSize: 11, background: "#ffeb3b", color:"#000", padding: "2px 6px", borderRadius: 4, fontWeight: "bold"}}>
+                    📴 Offline Sync
+                  </span>
+                )}
+            </div>
+            <span style={statusBadge(issue.status)}>
+              {issue.status.toUpperCase().replace("_", " ")}
+            </span>
+          </div>
+
+          <div style={cardBody}>
+            <p><strong>Refiller:</strong> {issue.refillerEmail || issue.refillerId}</p>
+            <p><strong>Type:</strong> {issue.issueType.replace("_", " ").toUpperCase()}</p>
+            <p style={{background: "#f9f9f9", padding: 10, borderRadius: 5, borderLeft: "4px solid #ddd"}}>
+                "{issue.description}"
+            </p>
+          </div>
+
+          <div style={cardFooter}>
+            {(issue.status === "reported" || issue.status === "open") && (
+              <button onClick={() => updateIssueStatus(issue.id, issue.machineId, "acknowledged")} style={btnBlue}>
+                👀 Acknowledge
+              </button>
+            )}
+
+            {issue.status === "acknowledged" && (
+              <button onClick={() => updateIssueStatus(issue.id, issue.machineId, "in_progress")} style={btnWarning}>
+                🛠️ Mark In Progress
+              </button>
+            )}
+
+            {issue.status === "in_progress" && (
+              <button onClick={() => updateIssueStatus(issue.id, issue.machineId, "resolved")} style={btnSuccess}>
+                ✅ Resolve & Reactivate Machine
+              </button>
+            )}
+            
+            {issue.status === "resolved" && (
+                <div style={{color: "green", fontSize: 14, fontWeight: "bold"}}>
+                  Resolved by {issue.resolvedBy}
+                </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ───────── UI Styles ───────── */
+const card = { background: "#fff", marginBottom: 20, borderRadius: 10, boxShadow: "0 2px 8px rgba(0,0,0,.08)", overflow: "hidden", border: "1px solid #eee" };
+const cardHeader = { padding: "15px 20px", background: "#f8f9fa", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" };
+const cardBody = { padding: "20px", fontSize: "14px", lineHeight: "1.6" };
+const cardFooter = { padding: "15px 20px", background: "#fff", borderTop: "1px solid #eee", display: "flex", justifyContent: "flex-end", alignItems: "center" };
+
+const btnBlue = { padding: "8px 16px", background: "#1976d2", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const btnWarning = { padding: "8px 16px", background: "#f57c00", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const btnSuccess = { padding: "8px 16px", background: "#43a047", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+
+function statusBadge(status) {
+  const base = { padding: "4px 10px", borderRadius: 12, fontSize: 12, fontWeight: "bold" };
+  if (status === "reported" || status === "open") return { ...base, background: "#ffebee", color: "#c62828" };
+  if (status === "acknowledged") return { ...base, background: "#e3f2fd", color: "#1565c0" };
+  if (status === "in_progress") return { ...base, background: "#fff3e0", color: "#ef6c00" };
+  if (status === "resolved") return { ...base, background: "#e8f5e9", color: "#2e7d32" };
+  return base;
+}

@@ -1,0 +1,17 @@
+# 🚀 Deployment & Setup Guide
+
+## 1. Prerequisites
+* Node.js v18+
+* Firebase CLI (`npm install -g firebase-tools`)
+* A Firebase Project with Firestore and Authentication (Email/Password) enabled.
+
+## 2. Environment Variables
+Create a `.env` file in the `frontend/` directory:
+```env
+VITE_FIREBASE_API_KEY="your_api_key"
+VITE_FIREBASE_AUTH_DOMAIN="your_project.firebaseapp.com"
+VITE_FIREBASE_PROJECT_ID="your_project_id"
+VITE_FIREBASE_STORAGE_BUCKET="your_project.appspot.com"
+VITE_FIREBASE_MESSAGING_SENDER_ID="123456789"
+VITE_FIREBASE_APP_ID="1:123:web:abc"
+VITE_ENV="production"

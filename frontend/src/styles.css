@@ -10,10 +10,20 @@
   --max-width: 420px;
 }
 
-* { 
-  box-sizing: border-box; 
-  margin: 0; 
-  padding: 0; 
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
 }
 
 .login-page {
@@ -175,11 +185,17 @@
 
 /* MOBILE RESPONSIVENESS */
 @media (max-width: 480px) {
-  .login-card { 
-    width: 92%; 
-    padding: 30px 20px; 
+  .login-card {
+    width: 92%;
+    padding: 30px 20px;
   }
-  .brand { 
-    font-size: 28px; 
+  .brand {
+    font-size: 28px;
   }
+}
+
+/* LOADING SPINNER */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

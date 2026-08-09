@@ -1,4 +1,4 @@
-# 🍫 SnackMaster - Enterprise Route Management
+f# 🍫 SnackMaster - Enterprise Route Management
 
 SnackMaster is a multi-tenant SaaS platform designed to manage smart vending machines, inventory routes, and field operations. It features a strict three-tier architecture ensuring complete data isolation and operational efficiency.
 

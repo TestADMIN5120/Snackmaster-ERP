@@ -1,0 +1,228 @@
+import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db, auth } from "../../firebaseClient";
+import { useAdmin } from "../../contexts/AdminContext";
+
+const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5001/api";
+// Static images are served from the backend origin, without the /api suffix.
+const IMAGE_ORIGIN = API_URL.replace(/\/api\/?$/, "");
+
+export default function AdminProductImages() {
+  const { orgId } = useAdmin();
+
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [busyId, setBusyId] = useState(null); // productId with an in-flight request
+  const [message, setMessage] = useState(null); // { type: "ok" | "error", text }
+
+  const fileInputRef = useRef(null);
+  const uploadTargetRef = useRef(null);
+
+  useEffect(() => {
+    if (orgId) loadProducts();
+  }, [orgId]);
+
+  async function loadProducts() {
+    setLoading(true);
+    try {
+      const q = query(collection(db, "master_products"), where("orgId", "==", orgId));
+      const snap = await getDocs(q);
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      list.sort((a, b) => (a.sku || "").localeCompare(b.sku || "", undefined, { numeric: true, sensitivity: "base" }));
+      setProducts(list);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function pickFileFor(product) {
+    uploadTargetRef.current = product;
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileSelected(e) {
+    const file = e.target.files[0];
+    const product = uploadTargetRef.current;
+    e.target.value = null;
+    if (!file || !product) return;
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      return setMessage({ type: "error", text: "Only JPG, PNG or WEBP images are allowed." });
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      return setMessage({ type: "error", text: "Image is larger than 2 MB. Please compress it first." });
+    }
+
+    setBusyId(product.id);
+    setMessage(null);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await axios.post(`${API_URL}/product-images/${product.id}`, formData, {
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, imageUrl: res.data.imageUrl } : p));
+      setMessage({ type: "ok", text: `Image saved for ${product.name || product.id}.` });
+    } catch (err) {
+      console.error(err);
+      setMessage({ type: "error", text: err.response?.data?.error || "Upload failed. Is the backend running?" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleDelete(product) {
+    if (!window.confirm(`Delete the image for "${product.name || product.id}"?`)) return;
+    setBusyId(product.id);
+    setMessage(null);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      await axios.delete(`${API_URL}/product-images/${product.id}`, {
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, imageUrl: null } : p));
+      setMessage({ type: "ok", text: `Image deleted for ${product.name || product.id}.` });
+    } catch (err) {
+      console.error(err);
+      setMessage({ type: "error", text: err.response?.data?.error || "Delete failed. Is the backend running?" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const term = search.trim().toLowerCase();
+  const filtered = term
+    ? products.filter(p =>
+        (p.name || "").toLowerCase().includes(term) ||
+        (p.sku || "").toLowerCase().includes(term) ||
+        (p.brand || "").toLowerCase().includes(term))
+    : products;
+
+  const withImage = products.filter(p => p.imageUrl).length;
+
+  return (
+    <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+      <div style={headerBar}>
+        <h1 style={{ margin: 0, color: "#fff", fontSize: 21, letterSpacing: "-0.5px" }}>🖼️ Product Images</h1>
+        <p style={{ color: "rgba(255,255,255,0.88)", margin: "3px 0 0 0", fontSize: 13 }}>
+          Upload one image per master product. Each image gets its own URL from the backend&apos;s /product_images folder.
+        </p>
+      </div>
+
+      {message && (
+        <div style={{
+          ...alertBox,
+          background: message.type === "ok" ? "#f0fdf4" : "#fef2f2",
+          color: message.type === "ok" ? "#166534" : "#991b1b",
+          borderColor: message.type === "ok" ? "#bbf7d0" : "#fecaca"
+        }}>
+          {message.type === "ok" ? "✅" : "❌"} {message.text}
+        </div>
+      )}
+
+      <div style={card}>
+        <div style={{ display: "flex", gap: 15, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
+          <input
+            type="text"
+            placeholder="🔍 Search by name, SKU or brand..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ ...input, flex: 1, minWidth: 220 }}
+          />
+          <span style={{ fontSize: 13, color: "#64748b", fontWeight: "bold" }}>
+            {withImage} / {products.length} products have an image
+          </span>
+        </div>
+
+        {/* Hidden shared file input — opened per-row via pickFileFor() */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          style={{ display: "none" }}
+          onChange={handleFileSelected}
+        />
+
+        {loading ? (
+          <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>Loading products...</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>
+            {products.length === 0 ? "No master products found. Add products in Master Products first." : "No products match your search."}
+          </div>
+        ) : (
+          <div style={tableWrapper}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+              <thead style={theadStyle}>
+                <tr>
+                  <th style={th}>Image</th>
+                  <th style={th}>SKU</th>
+                  <th style={th}>Product</th>
+                  <th style={th}>Brand</th>
+                  <th style={th}>Image URL</th>
+                  <th style={th}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(p => {
+                  const fullUrl = p.imageUrl ? `${IMAGE_ORIGIN}${p.imageUrl}` : null;
+                  const busy = busyId === p.id;
+                  return (
+                    <tr key={p.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                      <td style={td}>
+                        {fullUrl ? (
+                          <a href={fullUrl} target="_blank" rel="noreferrer" title="Open full image">
+                            <img src={fullUrl} alt={p.name} style={thumb} />
+                          </a>
+                        ) : (
+                          <div style={{ ...thumb, display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", color: "#94a3b8", fontSize: 18 }}>—</div>
+                        )}
+                      </td>
+                      <td style={{ ...td, fontFamily: "monospace", color: "#64748b" }}>{p.sku || "-"}</td>
+                      <td style={{ ...td, fontWeight: "bold" }}>
+                        {p.name || "-"}
+                        {p.isActive === false && <span style={inactiveChip}>INACTIVE</span>}
+                      </td>
+                      <td style={td}>{p.brand || "-"}</td>
+                      <td style={{ ...td, fontSize: 12, fontFamily: "monospace", color: "#64748b", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {fullUrl ? <a href={fullUrl} target="_blank" rel="noreferrer" style={{ color: "#357683" }}>{p.imageUrl}</a> : <span style={{ color: "#cbd5e1" }}>no image</span>}
+                      </td>
+                      <td style={td}>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={() => pickFileFor(p)} disabled={busy} style={btnUpload}>
+                            {busy ? "⏳..." : p.imageUrl ? "🔄 Replace" : "📤 Upload"}
+                          </button>
+                          {p.imageUrl && (
+                            <button onClick={() => handleDelete(p)} disabled={busy} style={btnDelete} title="Delete image">🗑️</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// STYLES (FineX theme)
+const headerBar = { background: "var(--fx-teal)", padding: "16px 20px", borderRadius: 8, marginBottom: 20, boxShadow: "0 2px 6px rgba(16,54,61,0.18)" };
+const card = { background: "#fff", padding: 20, borderRadius: 10, boxShadow: "0 1px 3px rgba(16,24,40,0.06)", border: "1px solid var(--fx-border)" };
+const alertBox = { padding: 13, borderRadius: 8, marginBottom: 16, fontSize: 14, border: "1px solid transparent" };
+const input = { padding: "10px 12px", borderRadius: 6, border: "1px solid #ced4da", outline: "none", background: "#fff", fontSize: 14, color: "#334155" };
+const tableWrapper = { border: "1px solid var(--fx-border)", borderRadius: 8, overflow: "hidden" };
+const theadStyle = { background: "#f1f3f5", color: "#23292f", fontSize: 13, textAlign: "left" };
+const th = { padding: "12px 16px", textAlign: "left", fontWeight: 700, whiteSpace: "nowrap", borderBottom: "1px solid var(--fx-border)" };
+const td = { padding: "10px 16px", color: "#334155", verticalAlign: "middle" };
+const thumb = { width: 48, height: 48, objectFit: "cover", borderRadius: 6, border: "1px solid var(--fx-border)" };
+const inactiveChip = { marginLeft: 8, fontSize: 10, fontWeight: "bold", color: "#b45309", background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: 4, padding: "2px 6px", verticalAlign: "middle" };
+const btnUpload = { background: "#eaf3f5", color: "#357683", border: "1px solid #b7d4da", padding: "7px 12px", borderRadius: 6, fontWeight: "bold", cursor: "pointer", fontSize: 12 };
+const btnDelete = { background: "#fef2f2", color: "#ef4444", border: "1px solid #fecaca", padding: "7px 10px", borderRadius: 6, fontWeight: "bold", cursor: "pointer", fontSize: 12 };

@@ -27,6 +27,7 @@ import AdminMachineSlots from "./pages/admin/AdminMachineSlots";
 import AdminMachineIssues from "./pages/admin/AdminMachineIssues";
 import AdminMakeKit from "./pages/admin/AdminMakeKit"; 
 import AccessRequests from "./pages/admin/AccessRequests";
+import AdminProductImages from "./pages/admin/AdminProductImages";
 
 /* ───────── WAREHOUSE ───────── */
 import WarehouseDashboard from "./pages/admin/WarehouseDashboard";
@@ -40,6 +41,7 @@ import WarehouseExpired from "./pages/admin/WarehouseExpired";
 
 /* ───────── 🟢 SALES & FINANCIALS (NEW) ───────── */
 import AdminSalesLedger from "./pages/admin/sales/AdminSalesLedger";
+import AdminNewSalesLedger from "./pages/admin/sales/AdminNewSalesLedger";
 import AdminSalesAnalytics from "./pages/admin/sales/AdminSalesAnalytics";
 
 /* ───────── REFILLER ───────── */
@@ -68,6 +70,7 @@ import RequireAdmin from "./components/RequireAdmin";
 import RequireSuperAdmin from "./components/RequireSuperAdmin";
 
 import "./styles.css";
+import "./theme-finex.css";
 
 /* ─────────────────────────────
    ROUTES CONFIGURATION
@@ -164,9 +167,11 @@ function AppRoutes() {
 
         {/* 🟢 NEW: SALES & FINANCIALS */}
         <Route path="sales/ledger" element={<AdminSalesLedger />} />
+        <Route path="sales/new-ledger" element={<AdminNewSalesLedger />} />
         <Route path="sales/analytics" element={<AdminSalesAnalytics />} />
 
         <Route path="products" element={<AdminProducts />} />
+        <Route path="product-images" element={<AdminProductImages />} />
         <Route path="refill-logs" element={<AdminRefillLogs />} />
         <Route path="audit-logs" element={<AdminAuditLogs />} />
         <Route path="users" element={<AdminUsers />} />

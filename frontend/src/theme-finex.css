@@ -1,0 +1,37 @@
+/* ============================================================
+   FineX-style theme (teal) — added 2026-07-19
+   Central palette + admin-layout hover rules for the FineX look
+   (teal top bar, white sidebar, lavender active nav).
+
+   REVERT: delete this file, remove its import from
+   frontend/src/main.jsx, and restore the files listed in
+   STYLE_CHANGES_FINEX_THEME.md.
+   ============================================================ */
+
+:root {
+  --fx-teal: #4696a4;        /* top app bar & section header bars */
+  --fx-teal-dark: #3c8290;   /* teal hover / accents */
+  --fx-slate: #5a7d9a;       /* primary action buttons (Search/Export) */
+  --fx-slate-dark: #4d6d88;  /* primary button hover */
+  --fx-lavender: #e8e7fa;    /* active nav item background */
+  --fx-indigo: #4f46e5;      /* active nav item text */
+  --fx-bg: #f4f6f8;          /* app content background */
+  --fx-border: #e2e7ea;      /* card & sidebar borders */
+  --fx-text: #3d444d;        /* sidebar / body text */
+}
+
+/* ---- Admin layout (white sidebar) ---- */
+.fx-nav::-webkit-scrollbar { width: 5px; }
+.fx-nav::-webkit-scrollbar-track { background: transparent; }
+.fx-nav::-webkit-scrollbar-thumb { background: #d5dade; border-radius: 3px; }
+.fx-nav::-webkit-scrollbar-thumb:hover { background: #b9c2c8; }
+
+.fx-navlink:hover { background: #f5f6f8 !important; color: #23292f !important; }
+.fx-section:hover { background: #f5f6f8 !important; }
+.fx-collapse:hover { background: #eef0f2 !important; color: #23292f !important; }
+
+/* ---- Teal top app bar ---- */
+.fx-logout:hover { background: rgba(255, 255, 255, 0.16) !important; }
+
+/* ---- Primary button hover (pages using var(--fx-slate)) ---- */
+.fx-btn-primary:hover { background: var(--fx-slate-dark) !important; }

@@ -162,6 +162,31 @@ export default function WarehouseDashboard() {
   };
   const getTypeMeta = (type) => TYPE_META[type] || { label: type, sign: "", color: "#475569", bg: "#f1f5f9", border: "#e2e8f0" };
 
+  // Person columns per movement tab: Inward shows the receiver, Outward the issuer + refiller,
+  // Returned the receiver + returner. Values come from the traceability fields captured on each
+  // form (issuedBy/issuedTo), falling back to performedBy for older records without them.
+  const PERSON_COLUMNS = {
+    INWARD: [{ label: "Received By", value: (m) => m.issuedTo || m.performedBy || "Admin" }],
+    OUTWARD: [
+      { label: "Issue By", value: (m) => m.issuedBy || m.performedBy || "Admin" },
+      { label: "Refiller", value: (m) => m.issuedTo || "-" },
+    ],
+    RETURN: [
+      { label: "Received By", value: (m) => m.issuedTo || m.performedBy || "Admin" },
+      { label: "Returned By", value: (m) => m.issuedBy || "-" },
+    ],
+    EXPIRED_DAMAGED: [{ label: "Performed By", value: (m) => m.performedBy || "Admin" }],
+  };
+  const personColumns = PERSON_COLUMNS[activeTab] || PERSON_COLUMNS.EXPIRED_DAMAGED;
+
+  // Per-row person info for mixed-type views (Stock History): maps a movement's type
+  // to the same labels used in the tab views (Received By / Issue By / Refiller / Returned By).
+  const getPersonInfo = (m) => {
+    const tabKey = (m.type === "OUTWARD_KIT" || m.type === "OUTWARD_MANUAL") ? "OUTWARD" : m.type;
+    const cols = PERSON_COLUMNS[tabKey] || PERSON_COLUMNS.EXPIRED_DAMAGED;
+    return cols.map(c => ({ label: c.label, value: c.value(m) }));
+  };
+
   // --- PAGINATION LOGIC ---
 
   const isStockTab = activeTab === "STOCK";
@@ -177,7 +202,7 @@ export default function WarehouseDashboard() {
 
   const exportMovementsPDF = () => {
     if (isHistoryView) {
-      const columns = ["Date", "Product", "Type", "Qty", "Reference / Remarks", "Performed By"];
+      const columns = ["Date", "Product", "Type", "Qty", "Reference / Remarks", "Person(s)"];
       const rows = historyMovements.map(m => {
         const meta = getTypeMeta(m.type);
         return [
@@ -186,19 +211,19 @@ export default function WarehouseDashboard() {
           meta.label,
           `${meta.sign}${m.quantity}`,
           m.referenceId || m.remarks || "-",
-          m.performedBy || "Admin"
+          getPersonInfo(m).map(p => `${p.label}: ${p.value}`).join(" | ")
         ];
       });
       generateBulkReportPDF("Stock History Data Sheet", columns, rows, orgId);
       return;
     }
-    const columns = ["Date", "Product", "Qty", "Reference / Remarks", "Performed By"];
+    const columns = ["Date", "Product", "Qty", "Reference / Remarks", ...personColumns.map(c => c.label)];
     const rows = filteredMovements.map(m => [
       getRecordDate(m).toLocaleDateString('en-IN'),
       m.productName,
       m.quantity.toString(),
       m.referenceId || m.remarks || "-",
-      m.performedBy || "Admin"
+      ...personColumns.map(c => c.value(m))
     ]);
     generateBulkReportPDF(`${activeTab} Data Sheet`, columns, rows, orgId);
   };
@@ -314,7 +339,7 @@ export default function WarehouseDashboard() {
                   <th style={th}>Type</th>
                   <th style={th}>Qty</th>
                   <th style={th}>Ref / Remarks</th>
-                  <th style={th}>Performed By</th>
+                  <th style={th}>Person(s)</th>
                 </tr>
               </thead>
               <tbody>
@@ -335,7 +360,11 @@ export default function WarehouseDashboard() {
                         </span>
                       </td>
                       <td style={{...td, color: "#64748b"}}>{m.referenceId || m.remarks || "-"}</td>
-                      <td style={td}>{m.performedBy || "Admin"}</td>
+                      <td style={td}>
+                        {getPersonInfo(m).map(p => (
+                          <div key={p.label} style={{ whiteSpace: "nowrap" }}><b style={{ color: "#475569" }}>{p.label}:</b> {p.value}</div>
+                        ))}
+                      </td>
                     </tr>
                   );
                 })}
@@ -352,7 +381,7 @@ export default function WarehouseDashboard() {
                   <th style={th}>Product Name</th>
                   <th style={th}>Qty</th>
                   <th style={th}>Ref / Remarks</th>
-                  <th style={th}>Performed By</th>
+                  {personColumns.map(c => <th key={c.label} style={th}>{c.label}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -366,7 +395,7 @@ export default function WarehouseDashboard() {
                       </span>
                     </td>
                     <td style={{...td, color: "#64748b"}}>{m.referenceId || m.remarks || "-"}</td>
-                    <td style={td}>{m.performedBy}</td>
+                    {personColumns.map(c => <td key={c.label} style={td}>{c.value(m)}</td>)}
                   </tr>
                 ))}
               </tbody>

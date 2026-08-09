@@ -80,6 +80,7 @@ export default function AdminKits() {
           productName: p.name,
           quantity: p.requiredQty,
           referenceId: kit.id,
+          issuedTo: kit.refillerEmail || null,
           orgId: orgId,
           performedBy: user.email,
           createdAt: serverTimestamp()

@@ -63,9 +63,31 @@ export default function WarehouseLedger() {
     }
   }
 
+  // Person labels per movement type: Inward shows the receiver, Outward the issuer + refiller,
+  // Returned the receiver + returner. Falls back to performedBy for older records.
+  const getPersonInfo = (m) => {
+    switch (m.type) {
+      case "INWARD":
+        return [{ label: "Received By", value: m.issuedTo || m.performedBy || "Admin" }];
+      case "OUTWARD_KIT":
+      case "OUTWARD_MANUAL":
+        return [
+          { label: "Issue By", value: m.issuedBy || m.performedBy || "Admin" },
+          { label: "Refiller", value: m.issuedTo || "-" },
+        ];
+      case "RETURN":
+        return [
+          { label: "Received By", value: m.issuedTo || m.performedBy || "Admin" },
+          { label: "Returned By", value: m.issuedBy || "-" },
+        ];
+      default:
+        return [{ label: "Performed By", value: m.performedBy || "Admin" }];
+    }
+  };
+
   // 🟢 Bulk Export Function Updated with Traceability
   const exportLedgerPDF = () => {
-    const columns = ["Date", "Type", "Product", "Qty", "From -> To (Location)", "Performed By"];
+    const columns = ["Date", "Type", "Product", "Qty", "From -> To (Location)", "Person(s)"];
     const rows = filteredMovements.map(m => {
       const traceString = m.issuedBy ? `${m.issuedBy} -> ${m.issuedTo} (${m.destination})` : (m.batchId ? `B:${m.batchId} ` : "") + (m.referenceId ? `R:${m.referenceId}` : "");
       return [
@@ -74,7 +96,7 @@ export default function WarehouseLedger() {
         m.productName,
         (m.type === "INWARD" || m.type === "RETURN" ? "+" : "-") + m.quantity.toString(),
         traceString,
-        m.performedBy
+        getPersonInfo(m).map(p => `${p.label}: ${p.value}`).join(" | ")
       ];
     });
     generateBulkReportPDF("Full Stock Ledger Audit", columns, rows, orgId);
@@ -123,7 +145,9 @@ export default function WarehouseLedger() {
                 
                 <td style={{...td, verticalAlign: "top"}}>
                   <div style={{fontWeight: "600", color: "#1e293b", marginBottom: 4}}>{m.productName}</div>
-                  <div style={{fontSize: 12, color: "#64748b"}}>Logged By: {m.performedBy}</div>
+                  {getPersonInfo(m).map(p => (
+                    <div key={p.label} style={{fontSize: 12, color: "#64748b"}}>{p.label}: {p.value}</div>
+                  ))}
                 </td>
                 
                 <td style={{...td, verticalAlign: "top", fontWeight: "bold", color: m.type === "INWARD" || m.type === "RETURN" ? "#10b981" : "#ef4444"}}>

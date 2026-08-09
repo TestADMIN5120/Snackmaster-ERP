@@ -10,6 +10,14 @@ export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [orgStatus, setOrgStatus] = useState({ suspended: false, deleted: false });
+  const [collapsed, setCollapsed] = useState(false);
+  const [openSections, setOpenSections] = useState({
+    inventory: true,
+    warehouse: true,
+    tracking: true,
+    sales: true,
+    team: true,
+  });
 
   useEffect(() => {
     if (!orgId) return;
@@ -38,192 +46,358 @@ export default function AdminLayout() {
     return false;
   };
 
-  const NavLink = ({ to, label, icon }) => (
-    <Link
-      to={to}
-      style={{
-        ...linkStyle,
-        background: isActive(to) ? "rgba(11, 195, 255, 0.15)" : "transparent",
-        color: isActive(to) ? "#0bc3ff" : "#eee",
-        borderLeft: isActive(to) ? "4px solid #0bc3ff" : "4px solid transparent"
-      }}
-    >
-      <span style={{ marginRight: 10 }}>{icon}</span>
-      {label}
-    </Link>
-  );
+  const toggleSection = (key) => {
+    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const NavLink = ({ to, label, icon }) => {
+    const active = isActive(to);
+    return (
+      <Link
+        to={to}
+        className={active ? undefined : "fx-navlink"}
+        style={{
+          textDecoration: "none",
+          padding: collapsed ? "10px 0" : "9px 14px 9px 20px",
+          fontWeight: active ? 600 : 500,
+          transition: "all 0.15s ease",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: collapsed ? "center" : "flex-start",
+          fontSize: 13,
+          gap: 10,
+          background: active ? "var(--fx-lavender)" : "transparent",
+          color: active ? "var(--fx-indigo)" : "#4b5563",
+          position: "relative",
+          borderBottom: "1px solid #f2f4f6",
+        }}
+      >
+        {active && (
+          <span style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 3,
+            background: "var(--fx-indigo)",
+          }} />
+        )}
+        <span style={{
+          width: 22,
+          textAlign: "center",
+          fontSize: 14,
+          flexShrink: 0,
+        }}>
+          {icon}
+        </span>
+        {!collapsed && <span>{label}</span>}
+      </Link>
+    );
+  };
+
+  const SectionToggle = ({ label, sectionKey }) => {
+    const open = openSections[sectionKey];
+    return (
+      <button
+        onClick={() => toggleSection(sectionKey)}
+        className="fx-section"
+        style={{
+          display: collapsed ? "none" : "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          width: "100%",
+          background: open ? "var(--fx-lavender)" : "#fff",
+          border: "none",
+          borderBottom: "1px solid #eef0f2",
+          color: open ? "var(--fx-indigo)" : "var(--fx-text)",
+          fontSize: 13.5,
+          fontWeight: 600,
+          padding: "12px 14px",
+          cursor: "pointer",
+          textAlign: "left",
+          transition: "all 0.15s",
+        }}
+      >
+        {label}
+        <span style={{
+          fontSize: 10,
+          transition: "transform 0.2s",
+          transform: open ? "rotate(180deg)" : "rotate(0deg)",
+          opacity: 0.65,
+        }}>
+          &#9660;
+        </span>
+      </button>
+    );
+  };
+
+  const sidebarWidth = collapsed ? 68 : 260;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#f4f7f6" }}>
-      {/* LEFT SIDEBAR */}
-      <aside style={sidebarStyle}>
-        <div style={{ marginBottom: 20, padding: "0 10px" }}>
-          <h2 style={{ color: "#0bc3ff", margin: "0 0 5px 0", letterSpacing: 1 }}>
-            ADMIN PANEL
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--fx-bg)" }}>
+      {/* TOP APP BAR (teal) */}
+      <header style={{
+        height: 52,
+        minHeight: 52,
+        background: "var(--fx-teal)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 18px",
+        boxShadow: "0 1px 4px rgba(16,54,61,0.25)",
+        zIndex: 20,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{
+            width: 30,
+            height: 30,
+            borderRadius: 8,
+            background: "rgba(255,255,255,0.18)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 16,
+            flexShrink: 0,
+          }}>
+            🍿
+          </div>
+          <h2 style={{
+            color: "#fff",
+            margin: 0,
+            fontSize: 17,
+            fontWeight: 800,
+            letterSpacing: 0.4,
+            whiteSpace: "nowrap",
+          }}>
+            SNACK<span style={{ color: "#ffe0b2" }}>MASTER</span>
           </h2>
-          <div style={{ fontSize: 12, color: "#90caf9", wordBreak: "break-all" }}>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+          <span style={{
+            color: "rgba(255,255,255,0.85)",
+            fontSize: 12.5,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: 260,
+          }}>
             {user?.email}
-          </div>
-          <div style={{ fontSize: 11, color: "#777", marginTop: 4, fontFamily: "monospace" }}>
-            ORG: {orgId}
-          </div>
+          </span>
+          <button
+            onClick={handleLogout}
+            className="fx-logout"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: "pointer",
+              padding: "8px 12px",
+              borderRadius: 6,
+              transition: "background 0.15s",
+              flexShrink: 0,
+            }}
+          >
+            Logout
+          </button>
         </div>
+      </header>
 
-        {/* NAVIGATION */}
-        <nav style={navWrapper}>
-          <NavLink to="/admin" label="Dashboard" icon="📊" />
-
-          {/* 🟢 ZONE 1: INVENTORY & ROUTE */}
-          <div style={zoneStyle}>
-            <div style={sectionHeader}>Inventory & Route</div>
-            <NavLink to="/admin/machines" label="All Machines" icon="🤖" />
-            <NavLink to="/admin/machines/assign" label="Assign Route" icon="📍" />
-            <NavLink to="/admin/products" label="Active Products" icon="🍫" />
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        {/* LEFT SIDEBAR (white) */}
+        <aside style={{
+          width: sidebarWidth,
+          minWidth: sidebarWidth,
+          flexShrink: 0,
+          background: "#fff",
+          borderRight: "1px solid var(--fx-border)",
+          display: "flex",
+          flexDirection: "column",
+          zIndex: 10,
+          transition: "width 0.25s ease, min-width 0.25s ease",
+          overflow: "hidden",
+        }}>
+          {/* SIDEBAR HEADER */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: collapsed ? "center" : "space-between",
+            padding: collapsed ? "14px 8px" : "14px 14px",
+            borderBottom: "1px solid #eef0f2",
+          }}>
+            {!collapsed && (
+              <div style={{ fontSize: 15.5, fontWeight: 700, color: "#23292f", whiteSpace: "nowrap" }}>
+                Admin Manager
+              </div>
+            )}
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              className="fx-collapse"
+              style={{
+                background: "#fff",
+                border: "1px solid var(--fx-border)",
+                color: "#6c757d",
+                width: 28,
+                height: 28,
+                borderRadius: 6,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 14,
+                flexShrink: 0,
+                transition: "all 0.2s",
+              }}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? ">" : "<"}
+            </button>
           </div>
 
-          {/* 🟢 ZONE 2: WAREHOUSE OPS */}
-          <div style={warehouseZoneStyle}>
-            <div style={{ ...sectionHeader, color: "#0bc3ff", fontWeight: "bold" }}>
-              Warehouse Ops
+          {/* USER INFO */}
+          {!collapsed && (
+            <div style={{
+              padding: "12px 14px",
+              borderBottom: "1px solid #eef0f2",
+              background: "#fafbfc",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: "50%",
+                  background: "var(--fx-teal)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: "#fff",
+                  flexShrink: 0,
+                }}>
+                  {(user?.email || "A")[0].toUpperCase()}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--fx-teal-dark)", textTransform: "uppercase", letterSpacing: 1 }}>Admin</div>
+                  <div style={{ fontSize: 11.5, color: "#6c757d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user?.email}
+                  </div>
+                </div>
+              </div>
+              <div style={{
+                marginTop: 8,
+                fontSize: 10,
+                color: "#6c757d",
+                fontFamily: "monospace",
+                background: "#fff",
+                padding: "4px 8px",
+                borderRadius: 5,
+                display: "inline-block",
+                border: "1px solid var(--fx-border)",
+              }}>
+                🏢 {orgId}
+              </div>
             </div>
-            <NavLink to="/admin/warehouse/dashboard" label="Dashboard" icon="📈" />
-            <NavLink to="/admin/warehouse/master-products" label="Master Catalog" icon="📖" />
-            <NavLink to="/admin/warehouse/inward" label="Inward Stock" icon="📥" />
-            <NavLink to="/admin/warehouse/outward" label="Manual Outward" icon="📤" />
-            <NavLink to="/admin/warehouse/returns" label="Manual Returns" icon="🔄" />
-            <NavLink to="/admin/warehouse/expired" label="Manual Expiry" icon="⚠️" />
-            <NavLink to="/admin/warehouse/kits" label="Issue Kits" icon="📦" />
-            <NavLink to="/admin/warehouse/movements" label="Stock Ledger" icon="📋" />
-          </div>
+          )}
 
-          {/* 🟢 ZONE 3: TRACKING & AUDITS */}
-          <div style={zoneStyle}>
-            <div style={sectionHeader}>Tracking & Audits</div>
-            <NavLink to="/admin/issues" label="Machine Issues" icon="🚨" />
-            <NavLink to="/admin/refill-logs" label="Refill Logs" icon="📋" />
-            <NavLink to="/admin/audit-logs" label="Audit Logs" icon="🔍" />
-          </div>
+          {/* NAVIGATION */}
+          <nav className="fx-nav" style={{
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+            overflowY: "auto",
+            overflowX: "hidden",
+          }}>
+            <NavLink to="/admin" label="Dashboard" icon="📊" />
 
-          {/* 🟢 ZONE 4: SALES & FINANCIALS (NEW – ADDED SAFELY) */}
-          <div style={zoneStyle}>
-            <div style={sectionHeader}>Sales & Financials</div>
-            <NavLink to="/admin/sales/ledger" label="Transaction Ledger" icon="🧾" />
-            <NavLink to="/admin/sales/analytics" label="Sales Analytics" icon="📈" />
-          </div>
+            {/* ZONE 1: INVENTORY & ROUTE */}
+            <SectionToggle label="Inventory & Route" sectionKey="inventory" />
+            {(collapsed || openSections.inventory) && (
+              <div>
+                <NavLink to="/admin/machines" label="All Machines" icon="🤖" />
+                <NavLink to="/admin/machines/assign" label="Assign Route" icon="📍" />
+                <NavLink to="/admin/products" label="Active Products" icon="🍫" />
+                <NavLink to="/admin/product-images" label="Product Images" icon="🖼️" />
+              </div>
+            )}
 
-          {/* 🟢 ZONE 5: TEAM & SECURITY */}
-          <div style={zoneStyle}>
-            <div style={sectionHeader}>Team & Security</div>
-            <NavLink to="/admin/users" label="Team (Refillers)" icon="👔" />
-            <NavLink to="/admin/access-requests" label="Access Requests" icon="🔑" />
-            <NavLink to="/admin/change-password" label="Change Password" icon="🔒" />
-          </div>
-        </nav>
+            {/* ZONE 2: WAREHOUSE OPS */}
+            <SectionToggle label="Warehouse Ops" sectionKey="warehouse" />
+            {(collapsed || openSections.warehouse) && (
+              <div>
+                <NavLink to="/admin/warehouse/dashboard" label="Dashboard" icon="📈" />
+                <NavLink to="/admin/warehouse/master-products" label="Master Catalog" icon="📖" />
+                <NavLink to="/admin/warehouse/inward" label="Inward Stock" icon="📥" />
+                <NavLink to="/admin/warehouse/outward" label="Manual Outward" icon="📤" />
+                <NavLink to="/admin/warehouse/returns" label="Manual Returns" icon="🔄" />
+                <NavLink to="/admin/warehouse/expired" label="Manual Expiry" icon="⚠️" />
+                <NavLink to="/admin/warehouse/kits" label="Issue Kits" icon="📦" />
+                <NavLink to="/admin/warehouse/movements" label="Stock Ledger" icon="📋" />
+              </div>
+            )}
 
-        <button onClick={handleLogout} style={logoutStyle}>
-          🚪 Logout
-        </button>
-      </aside>
+            {/* ZONE 3: TRACKING & AUDITS */}
+            <SectionToggle label="Tracking & Audits" sectionKey="tracking" />
+            {(collapsed || openSections.tracking) && (
+              <div>
+                <NavLink to="/admin/issues" label="Machine Issues" icon="🚨" />
+                <NavLink to="/admin/refill-logs" label="Refill Logs" icon="📋" />
+                <NavLink to="/admin/audit-logs" label="Audit Logs" icon="🔍" />
+              </div>
+            )}
 
-      {/* RIGHT CONTENT */}
-      <main style={{ flex: 1, height: "100vh", overflowY: "auto", overflowX: "auto" }}>
-        {isBlocked && (
-          <div style={suspendedBanner}>
-            <div style={{ fontSize: 20 }}>⚠️</div>
-            <div>
-              <strong>Organisation Restricted:</strong> Your organisation ({orgId}) has been
-              {orgStatus.deleted ? " deleted " : " suspended "} by the system administrator.
-              Operations are locked.
+            {/* ZONE 4: SALES & FINANCIALS */}
+            <SectionToggle label="Sales & Financials" sectionKey="sales" />
+            {(collapsed || openSections.sales) && (
+              <div>
+                <NavLink to="/admin/sales/ledger" label="Transaction Ledger" icon="🧾" />
+                <NavLink to="/admin/sales/new-ledger" label="New Transaction Ledger" icon="🆕" />
+                <NavLink to="/admin/sales/analytics" label="Sales Analytics" icon="📈" />
+              </div>
+            )}
+
+            {/* ZONE 5: TEAM & SECURITY */}
+            <SectionToggle label="Team & Security" sectionKey="team" />
+            {(collapsed || openSections.team) && (
+              <div>
+                <NavLink to="/admin/users" label="Team (Refillers)" icon="👔" />
+                <NavLink to="/admin/access-requests" label="Access Requests" icon="🔑" />
+                <NavLink to="/admin/change-password" label="Change Password" icon="🔒" />
+              </div>
+            )}
+          </nav>
+        </aside>
+
+        {/* RIGHT CONTENT */}
+        <main style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
+          {isBlocked && (
+            <div style={{
+              background: "#fff1f2",
+              color: "#be123c",
+              padding: "16px 24px",
+              borderBottom: "2px solid #fda4af",
+              display: "flex",
+              alignItems: "center",
+              gap: 15,
+              fontWeight: 500,
+              position: "sticky",
+              top: 0,
+              zIndex: 100,
+            }}>
+              <div style={{ fontSize: 20 }}>&#9888;</div>
+              <div>
+                <strong>Organisation Restricted:</strong> Your organisation ({orgId}) has been
+                {orgStatus.deleted ? " deleted " : " suspended "} by the system administrator.
+                Operations are locked.
+              </div>
             </div>
+          )}
+          <div style={{ padding: 24, boxSizing: "border-box" }}>
+            <Outlet />
           </div>
-        )}
-        <div style={{ padding: 30, boxSizing: "border-box" }}>
-          <Outlet />
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
-
-/* ───────── STYLES ───────── */
-
-const sidebarStyle = {
-  width: 260,
-  minWidth: 260,
-  flexShrink: 0,
-  background: "#111",
-  color: "#fff",
-  padding: "30px 12px",
-  display: "flex",
-  flexDirection: "column",
-  boxShadow: "4px 0 15px rgba(0,0,0,0.1)",
-  zIndex: 10
-};
-
-const navWrapper = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 8,
-  flex: 1,
-  overflowY: "auto",
-  paddingRight: 5,
-  marginBottom: 20
-};
-
-const zoneStyle = { margin: "10px 0" };
-
-const warehouseZoneStyle = {
-  margin: "10px 0",
-  background: "rgba(11, 195, 255, 0.05)",
-  border: "1px solid rgba(11, 195, 255, 0.2)",
-  borderRadius: 8,
-  padding: "10px 0",
-  boxShadow: "inset 0 4px 10px rgba(0,0,0,0.2)"
-};
-
-const sectionHeader = {
-  color: "#777",
-  fontSize: 11,
-  padding: "0 12px",
-  textTransform: "uppercase",
-  letterSpacing: 1,
-  marginBottom: 8
-};
-
-const linkStyle = {
-  textDecoration: "none",
-  padding: "10px 16px",
-  borderRadius: "0 8px 8px 0",
-  fontWeight: 600,
-  transition: "all 0.2s ease",
-  display: "flex",
-  alignItems: "center",
-  fontSize: 13
-};
-
-const logoutStyle = {
-  padding: "12px",
-  background: "rgba(229, 57, 53, 0.1)",
-  border: "1px solid rgba(229, 57, 53, 0.3)",
-  color: "#ef5350",
-  borderRadius: 8,
-  fontWeight: "bold",
-  cursor: "pointer",
-  width: "100%",
-  transition: "all 0.2s ease",
-  flexShrink: 0
-};
-
-const suspendedBanner = {
-  background: "#fff1f2",
-  color: "#be123c",
-  padding: "16px 24px",
-  borderBottom: "2px solid #fda4af",
-  display: "flex",
-  alignItems: "center",
-  gap: 15,
-  fontWeight: 500,
-  position: "sticky",
-  top: 0,
-  zIndex: 100
-};

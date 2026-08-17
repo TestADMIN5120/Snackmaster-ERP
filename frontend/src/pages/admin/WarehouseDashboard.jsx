@@ -1,18 +1,24 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, writeBatch, increment, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
 import { generateBulkReportPDF } from "../../utils/pdfGenerator";
 
 export default function WarehouseDashboard() {
-  const { orgId } = useAdmin();
+  const { orgId, user } = useAdmin();
   const [loading, setLoading] = useState(true);
-  
+
   // Data States
   const [movements, setMovements] = useState([]);
   const [products, setProducts] = useState([]); // Restored products state
   const [masterProducts, setMasterProducts] = useState([]); // Catalog for product search suggestions
+  const [machines, setMachines] = useState([]); // Destination options for the Outward edit modal
   const [userNames, setUserNames] = useState({}); // email -> displayName (to show names instead of emails)
+
+  // 🟢 Outward Edit/Delete state
+  const [editMov, setEditMov] = useState(null); // movement being edited (OUTWARD_MANUAL only)
+  const [editForm, setEditForm] = useState({ dateIssued: "", qty: "", machineId: "", purpose: "Manual Adjustment", remarks: "", issuedBy: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Section 1: Movements UI State
   const [activeTab, setActiveTab] = useState("STOCK");
@@ -50,6 +56,15 @@ export default function WarehouseDashboard() {
         .map(d => ({ id: d.id, name: d.data().name, sku: d.data().sku || "N/A" }));
       catalog.sort((a, b) => (a.sku || "").toString().toLowerCase().localeCompare((b.sku || "").toString().toLowerCase(), undefined, { numeric: true, sensitivity: 'base' }));
       setMasterProducts(catalog);
+
+      // Fetch machines for the Outward edit modal's destination dropdown
+      const machQ = query(collection(db, "machines"), where("orgId", "==", orgId));
+      const machSnap = await getDocs(machQ);
+      const machList = machSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(mm => mm.deleted !== true);
+      machList.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }));
+      setMachines(machList);
 
       // Fetch org users to map emails -> display names (old records store emails in issuedBy/performedBy)
       const usersQ = query(collection(db, "users"), where("orgId", "==", orgId));
@@ -200,6 +215,92 @@ export default function WarehouseDashboard() {
     const cols = PERSON_COLUMNS[tabKey] || PERSON_COLUMNS.EXPIRED_DAMAGED;
     return cols.map(c => ({ label: c.label, value: c.value(m) }));
   };
+
+  // --- 🟢 OUTWARD EDIT / DELETE ---
+  // Manual outward records only: kit dispatches (OUTWARD_KIT) are auto-generated from kits
+  // and editing/deleting only the movement would desync the kit records.
+  // Stock impact: edits adjust products.warehouseStock by the qty difference; deletes restore it.
+
+  function openEdit(m) {
+    setEditForm({
+      dateIssued: getRecordDate(m).toISOString().split('T')[0],
+      qty: m.quantity ?? "",
+      machineId: m.destination || "",
+      purpose: m.purpose || "Manual Adjustment",
+      remarks: m.remarks || "",
+      issuedBy: m.issuedBy || "",
+    });
+    setEditMov(m);
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    const newQty = Number(editForm.qty);
+    if (!editForm.dateIssued) return alert("Select a valid date.");
+    if (!newQty || newQty <= 0) return alert("Enter a valid quantity.");
+    if (!editForm.machineId) return alert("Select a destination machine.");
+    if (!editForm.remarks.trim()) return alert("Remarks are mandatory.");
+
+    const oldQty = Number(editMov.quantity) || 0;
+    const extra = newQty - oldQty; // additional stock needed if qty increased
+    const product = products.find(p => p.id === editMov.productId);
+    if (extra > 0) {
+      const available = product?.warehouseStock || 0;
+      if (extra > available) {
+        return alert(`Insufficient stock: increasing quantity by ${extra}, but only ${available} available in warehouse.`);
+      }
+    }
+
+    setSavingEdit(true);
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(db, "warehouse_movements", editMov.id), {
+        quantity: newQty,
+        movementDate: Timestamp.fromDate(new Date(editForm.dateIssued)),
+        destination: editForm.machineId,
+        purpose: editForm.purpose,
+        remarks: editForm.remarks.trim(),
+        issuedBy: editForm.issuedBy,
+        updatedAt: serverTimestamp(),
+        editedBy: user?.email || "",
+      });
+      if (extra !== 0 && product) {
+        batch.update(doc(db, "products", product.id), {
+          warehouseStock: increment(-extra),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      setEditMov(null);
+      await loadAllData();
+    } catch (err) {
+      console.error("Outward Edit Error:", err);
+      alert("Failed to update record.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleDeleteOutward(m) {
+    const qty = Number(m.quantity) || 0;
+    if (!window.confirm(`Delete this outward record?\n\n${qty} x ${m.productName} → ${m.destination || "-"}\n\n${qty} unit(s) will be restored to warehouse stock.`)) return;
+    try {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, "warehouse_movements", m.id));
+      const product = products.find(p => p.id === m.productId);
+      if (product) {
+        batch.update(doc(db, "products", product.id), {
+          warehouseStock: increment(qty),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      await loadAllData();
+    } catch (err) {
+      console.error("Outward Delete Error:", err);
+      alert("Failed to delete record.");
+    }
+  }
 
   // --- PAGINATION LOGIC ---
 
@@ -396,6 +497,7 @@ export default function WarehouseDashboard() {
                   <th style={th}>Qty</th>
                   <th style={th}>Ref / Remarks</th>
                   {personColumns.map(c => <th key={c.label} style={th}>{c.label}</th>)}
+                  {activeTab === "OUTWARD" && <th style={th}>Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -410,6 +512,18 @@ export default function WarehouseDashboard() {
                     </td>
                     <td style={{...td, color: "#64748b"}}>{m.referenceId || m.remarks || "-"}</td>
                     {personColumns.map(c => <td key={c.label} style={td}>{c.value(m)}</td>)}
+                    {activeTab === "OUTWARD" && (
+                      <td style={{...td, whiteSpace: "nowrap"}}>
+                        {m.type === "OUTWARD_MANUAL" ? (
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button onClick={() => openEdit(m)} style={btnEdit} title="Edit record">✏️ Edit</button>
+                            <button onClick={() => handleDeleteOutward(m)} style={btnDelete} title="Delete record and restore stock">🗑️ Delete</button>
+                          </div>
+                        ) : (
+                          <span style={{ color: "#94a3b8", fontSize: 12 }} title="Kit dispatches are managed from the Kits section">Kit — locked</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -437,6 +551,50 @@ export default function WarehouseDashboard() {
           </div>
         </div>
       </div>
+
+      {/* 🟢 OUTWARD EDIT MODAL */}
+      {editMov && (
+        <div style={modalOverlay} onClick={() => !savingEdit && setEditMov(null)}>
+          <div style={modalBox} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 4px 0", color: "#1e293b" }}>✏️ Edit Outward Record</h3>
+            <p style={{ margin: "0 0 16px 0", color: "#64748b", fontSize: 13 }}>
+              <b style={{ color: "#334155" }}>{editMov.productName}</b> — Issued to {displayPerson(editMov.issuedTo) || "-"}
+            </p>
+            <form onSubmit={saveEdit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", gap: 12 }}>
+                <label style={{...label, flex: 1}}>Date Issued * <input type="date" value={editForm.dateIssued} onChange={e => setEditForm(f => ({ ...f, dateIssued: e.target.value }))} style={input} required /></label>
+                <label style={{...label, width: 100}}>Qty * <input type="number" min="1" value={editForm.qty} onChange={e => setEditForm(f => ({ ...f, qty: e.target.value }))} style={input} required /></label>
+              </div>
+              <div style={{ display: "flex", gap: 12 }}>
+                <label style={{...label, flex: 1}}>Destination Machine *
+                  <select value={editForm.machineId} onChange={e => setEditForm(f => ({ ...f, machineId: e.target.value }))} style={input} required>
+                    <option value="">-- Select Machine --</option>
+                    {editForm.machineId && !machines.some(mm => mm.id === editForm.machineId) && (
+                      <option value={editForm.machineId}>{editForm.machineId}</option>
+                    )}
+                    {machines.map(mm => (
+                      <option key={mm.id} value={mm.id}>{mm.id}{mm.name ? ` - ${mm.name}` : ""}{mm.location ? ` (${mm.location})` : ""}</option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{...label, flex: 1}}>Purpose *
+                  <select value={editForm.purpose} onChange={e => setEditForm(f => ({ ...f, purpose: e.target.value }))} style={input}>
+                    <option value="Manual Adjustment">Manual Adjustment</option>
+                    <option value="Transfer to Machine">Transfer to Machine</option>
+                    <option value="Damaged">Damaged</option>
+                  </select>
+                </label>
+              </div>
+              <label style={label}>Issued By * <input type="text" value={editForm.issuedBy} onChange={e => setEditForm(f => ({ ...f, issuedBy: e.target.value }))} style={input} required placeholder="Name of person handing over" /></label>
+              <label style={label}>Remarks * <textarea value={editForm.remarks} onChange={e => setEditForm(f => ({ ...f, remarks: e.target.value }))} style={input} rows="2" required /></label>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 4 }}>
+                <button type="button" onClick={() => setEditMov(null)} disabled={savingEdit} style={btnCancel}>Cancel</button>
+                <button type="submit" disabled={savingEdit} style={btnSave}>{savingEdit ? "Saving..." : "💾 Save Changes"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
@@ -482,3 +640,9 @@ const td = { padding: "11px 16px", color: "#334155" };
 const skuChip = { fontFamily: "monospace", background: "#f1f5f9", border: "1px solid #e2e8f0", padding: "3px 9px", borderRadius: 6, fontSize: 12.5, color: "#475569", fontWeight: 600 };
 const paginationRow = { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 15 };
 const btnPage = { padding: "7px 14px", background: "#eaf3f5", border: "1px solid #b7d4da", borderRadius: 6, cursor: "pointer", fontWeight: "bold", color: "#357683" };
+const btnEdit = { padding: "6px 12px", background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 6, cursor: "pointer", fontWeight: "bold", fontSize: 12.5, whiteSpace: "nowrap" };
+const btnDelete = { padding: "6px 12px", background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca", borderRadius: 6, cursor: "pointer", fontWeight: "bold", fontSize: 12.5, whiteSpace: "nowrap" };
+const modalOverlay = { position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 };
+const modalBox = { background: "#fff", padding: 24, borderRadius: 12, width: "100%", maxWidth: 540, boxShadow: "0 10px 40px rgba(0,0,0,0.25)", maxHeight: "90vh", overflowY: "auto" };
+const btnCancel = { padding: "10px 20px", background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const btnSave = { padding: "10px 20px", background: "var(--fx-teal)", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };

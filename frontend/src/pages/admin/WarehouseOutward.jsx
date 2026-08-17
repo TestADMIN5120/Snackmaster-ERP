@@ -94,6 +94,7 @@ export default function WarehouseOutward() {
     e.preventDefault();
     if (!dateIssued || !issuedBy) return alert("Fill Date Issued and Issued By.");
     if (!selectedRefiller) return alert("Select a valid refiller from the Issued To dropdown.");
+    if (!remarks.trim()) return alert("Remarks are mandatory.");
 
     // Validate every row
     for (let i = 0; i < rows.length; i++) {
@@ -137,7 +138,7 @@ export default function WarehouseOutward() {
           quantity: Number(r.qty),
           movementDate: Timestamp.fromDate(movementDate),
           purpose: purpose,
-          remarks: remarks || "",
+          remarks: remarks.trim(),
           issuedBy: issuedBy,
           issuedTo: selectedRefiller.email,
           destination: r.machineId,
@@ -268,7 +269,7 @@ export default function WarehouseOutward() {
               </datalist>
             </div>
 
-            <label style={label}>General Remarks <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={input} rows="2" /></label>
+            <label style={label}>General Remarks * <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={input} rows="2" required /></label>
 
             <button type="submit" disabled={loading} style={btnDanger}>{loading ? "Processing..." : "📤 Deduct Stock"}</button>
           </form>

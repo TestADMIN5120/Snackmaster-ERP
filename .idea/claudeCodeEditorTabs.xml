@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ClaudeCodeEditorTabs">
+    <option name="activeSessionId" value="363f4a9d-ed66-4693-b426-eabc762e4118" />
+    <option name="openSessionIds">
+      <list>
+        <option value="40802d85-e3f6-49f0-97ad-461c9a4836a8" />
+        <option value="fc120940-d75d-4f0d-9806-a46ddd27ba07" />
+        <option value="65c79a31-e0ca-4020-a9da-fa18ad2a04b5" />
+        <option value="2f1209ee-468c-41ed-a72b-72804b9351d6" />
+        <option value="e5b26eb7-c925-43ac-b250-5803d6f971ba" />
+        <option value="363f4a9d-ed66-4693-b426-eabc762e4118" />
+      </list>
+    </option>
+    <option name="sessionPaths">
+      <map>
+        <entry key="2f1209ee-468c-41ed-a72b-72804b9351d6" value="/switch-account" />
+        <entry key="363f4a9d-ed66-4693-b426-eabc762e4118" value="/switch-account" />
+        <entry key="40802d85-e3f6-49f0-97ad-461c9a4836a8" value="/switch-account" />
+        <entry key="65c79a31-e0ca-4020-a9da-fa18ad2a04b5" value="/switch-account" />
+        <entry key="e5b26eb7-c925-43ac-b250-5803d6f971ba" value="/switch-account" />
+      </map>
+    </option>
+    <option name="sessionTitles">
+      <map>
+        <entry key="2f1209ee-468c-41ed-a72b-72804b9351d6" value="❯ can you duplicate menu and functionalitity of Tr" />
+        <entry key="363f4a9d-ed66-4693-b426-eabc762e4118" value="localhost:53200/switch-account?workingDir=C%3A%2FUsers%2FDell%2FOneDrive%2FDesktop%2FSnackMaster%2FSnackmaster-ERP-main&amp;panelId=ec4a04c6-545a-453f-9954-6dc0ea2f77ed&amp;theme=dark" />
+        <entry key="40802d85-e3f6-49f0-97ad-461c9a4836a8" value="localhost:53742/switch-account?workingDir=C%3A%2FUsers%2FDell%2FOneDrive%2FDesktop%2FSnackMaster%2FSnackmaster-ERP-main&amp;panelId=5e0714cb-3e90-44f1-ac74-9e08575cd266&amp;theme=dark" />
+        <entry key="65c79a31-e0ca-4020-a9da-fa18ad2a04b5" value="Claude Code" />
+        <entry key="acb36f4a-4edc-42b8-b508-579adbadbbd2" value="please run the application" />
+        <entry key="e5b26eb7-c925-43ac-b250-5803d6f971ba" value="localhost:58911/switch-account?workingDir=C%3A%2FUsers%2FDell%2FOneDrive%2FDesktop%2FSnackMaster%2FSnackmaster-ERP-main&amp;panelId=d8b30283-8b8a-4b76-9223-5152fad37a60&amp;theme=dark" />
+      </map>
+    </option>
+  </component>
+</project>

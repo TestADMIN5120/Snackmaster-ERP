@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { collection, query, where, getDocs, doc, writeBatch, increment, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, writeBatch, increment, serverTimestamp } from "firebase/firestore";
 import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
 import { generateBulkReportPDF } from "../../utils/pdfGenerator";
@@ -236,7 +236,6 @@ export default function WarehouseDashboard() {
   async function saveEdit(e) {
     e.preventDefault();
     const newQty = Number(editForm.qty);
-    if (!editForm.dateIssued) return alert("Select a valid date.");
     if (!newQty || newQty <= 0) return alert("Enter a valid quantity.");
     if (!editForm.machineId) return alert("Select a destination machine.");
     if (!editForm.remarks.trim()) return alert("Remarks are mandatory.");
@@ -256,11 +255,9 @@ export default function WarehouseDashboard() {
       const batch = writeBatch(db);
       batch.update(doc(db, "warehouse_movements", editMov.id), {
         quantity: newQty,
-        movementDate: Timestamp.fromDate(new Date(editForm.dateIssued)),
         destination: editForm.machineId,
         purpose: editForm.purpose,
         remarks: editForm.remarks.trim(),
-        issuedBy: editForm.issuedBy,
         updatedAt: serverTimestamp(),
         editedBy: user?.email || "",
       });
@@ -562,7 +559,7 @@ export default function WarehouseDashboard() {
             </p>
             <form onSubmit={saveEdit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", gap: 12 }}>
-                <label style={{...label, flex: 1}}>Date Issued * <input type="date" value={editForm.dateIssued} onChange={e => setEditForm(f => ({ ...f, dateIssued: e.target.value }))} style={input} required /></label>
+                <label style={{...label, flex: 1}}>Date Issued <input type="date" value={editForm.dateIssued} readOnly style={{...input, background: "#f1f5f9", color: "#64748b", cursor: "not-allowed"}} /></label>
                 <label style={{...label, width: 100}}>Qty * <input type="number" min="1" value={editForm.qty} onChange={e => setEditForm(f => ({ ...f, qty: e.target.value }))} style={input} required /></label>
               </div>
               <div style={{ display: "flex", gap: 12 }}>
@@ -585,7 +582,7 @@ export default function WarehouseDashboard() {
                   </select>
                 </label>
               </div>
-              <label style={label}>Issued By * <input type="text" value={editForm.issuedBy} onChange={e => setEditForm(f => ({ ...f, issuedBy: e.target.value }))} style={input} required placeholder="Name of person handing over" /></label>
+              <label style={label}>Issued By <input type="text" value={editForm.issuedBy} readOnly style={{...input, background: "#f1f5f9", color: "#64748b", cursor: "not-allowed"}} placeholder="Name of person handing over" /></label>
               <label style={label}>Remarks * <textarea value={editForm.remarks} onChange={e => setEditForm(f => ({ ...f, remarks: e.target.value }))} style={input} rows="2" required /></label>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 4 }}>
                 <button type="button" onClick={() => setEditMov(null)} disabled={savingEdit} style={btnCancel}>Cancel</button>

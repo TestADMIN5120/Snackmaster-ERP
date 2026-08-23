@@ -32,13 +32,17 @@ export default function SuperAdminMachineCreate() {
   const { user } = useAdmin();
 
   const [orgs, setOrgs] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [form, setForm] = useState({
     id: "",
     name: "",
     location: "",
+    locationId: "",
+    vendorId: "",
     googleMapsUrl: "", // 🟢 NEW FIELD
     capacity: "",
-    orgId: "", 
+    orgId: "",
   });
 
   const [saving, setSaving] = useState(false);
@@ -53,7 +57,27 @@ export default function SuperAdminMachineCreate() {
         console.error("Failed to load organizations", err);
       }
     }
+    async function loadLocations() {
+      try {
+        const q = query(collection(db, "locations"), where("deleted", "==", false));
+        const snap = await getDocs(q);
+        setLocations(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error("Failed to load locations", err);
+      }
+    }
+    async function loadVendors() {
+      try {
+        const q = query(collection(db, "vendors"), where("deleted", "==", false));
+        const snap = await getDocs(q);
+        setVendors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error("Failed to load vendors", err);
+      }
+    }
     loadOrgs();
+    loadLocations();
+    loadVendors();
   }, []);
 
   function updateField(e) {
@@ -75,9 +99,11 @@ export default function SuperAdminMachineCreate() {
         id: form.id,
         name: form.name,
         location: form.location || null,
+        locationId: form.locationId || null,
+        vendorId: form.vendorId || null,
         googleMapsUrl: form.googleMapsUrl || null, // 🟢 Saved to DB
         capacity: Number(form.capacity) || null,
-        orgId: form.orgId || null, 
+        orgId: form.orgId || null,
         assigned: !!form.orgId,
         status: form.orgId ? "active" : "unassigned",
         deleted: false,
@@ -133,6 +159,30 @@ export default function SuperAdminMachineCreate() {
           onChange={updateField}
           placeholder="e.g. Ground Floor Lobby"
         />
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>
+            Location
+          </label>
+          <select name="locationId" value={form.locationId} onChange={updateField} style={input}>
+            <option value="">-- Select Location --</option>
+            {locations.map(loc => (
+              <option key={loc.id} value={loc.id}>{loc.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>
+            Vendor
+          </label>
+          <select name="vendorId" value={form.vendorId} onChange={updateField} style={input}>
+            <option value="">-- Select Vendor --</option>
+            {vendors.map(v => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+        </div>
 
         {/* 🟢 NEW INPUT FIELD */}
         <Field

@@ -22,9 +22,13 @@ export default function SuperAdminAdmins() {
   const [orgs, setOrgs] = useState([]);
   const [search, setSearch] = useState("");
   const [filterOrg, setFilterOrg] = useState("");
-  const [viewDeleted, setViewDeleted] = useState(false); 
+  const [viewDeleted, setViewDeleted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [viewAdmin, setViewAdmin] = useState(null);
+  const [editAdmin, setEditAdmin] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -118,6 +122,24 @@ export default function SuperAdminAdmins() {
     try { await sendPasswordResetEmail(auth, email); alert("Reset email sent"); } catch(e) { alert("Failed"); }
   }
 
+  async function saveEditAdmin() {
+    if (!editName.trim()) return alert("Name is required.");
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "users", editAdmin.id), {
+        displayName: editName.trim(),
+        updatedAt: serverTimestamp(),
+      });
+      await log("ADMIN_EDITED", { adminEmail: editAdmin.email, orgId: editAdmin.orgId });
+      setEditAdmin(null);
+      await loadData();
+    } catch (err) {
+      alert("Failed to update admin.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const visibleAdmins = useMemo(() => {
     return admins.filter((a) => {
       const isDeletedMatch = viewDeleted ? a.deleted === true : (a.deleted === false || !a.deleted);
@@ -166,10 +188,10 @@ export default function SuperAdminAdmins() {
         <table style={table}>
           <thead>
             <tr>
-              <th style={{ ...th, width: "25%" }}>Admin Details</th>
-              <th style={{ ...th, width: "25%" }}>Organisation</th>
+              <th style={{ ...th, width: "20%" }}>Admin Details</th>
+              <th style={{ ...th, width: "18%" }}>Organisation</th>
               <th style={{ ...th, width: "10%" }}>Status</th>
-              <th style={{ ...th, width: "40%" }}>Actions</th>
+              <th style={{ ...th, width: "52%" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -190,19 +212,28 @@ export default function SuperAdminAdmins() {
                 </td>
                 <td style={td}>
                   <div style={actionsWrapper}>
+                    <button onClick={() => setViewAdmin(a)} style={btnActionView}>View</button>
+
                     {viewDeleted ? (
-                      <button 
-                        disabled={busyId === a.id} 
-                        onClick={() => restoreAdmin(a)} 
+                      <button
+                        disabled={busyId === a.id}
+                        onClick={() => restoreAdmin(a)}
                         style={btnRestore}
                       >
                         🔄 Restore Admin
                       </button>
                     ) : (
                       <>
+                        <button
+                          onClick={() => { setEditAdmin(a); setEditName(a.displayName || ""); }}
+                          style={btnActionEdit}
+                        >
+                          Edit
+                        </button>
+
                         {/* 🟢 STRICT FIXED-WIDTH ACTION BUTTONS */}
                         <button onClick={() => resendReset(a.email)} style={btnActionReset}>Reset</button>
-                        
+
                         <select
                           disabled={busyId === a.id}
                           onChange={(e) => reassignAdmin(a, e.target.value)}
@@ -214,14 +245,14 @@ export default function SuperAdminAdmins() {
                             <option key={o.id} value={o.id}>{o.name}</option>
                           ))}
                         </select>
-                        
+
                         {a.status === "disabled" ? (
                           <button onClick={() => toggleAdmin(a, true)} style={btnActionEnable}>Enable</button>
                         ) : (
                           <button onClick={() => toggleAdmin(a, false)} style={btnActionDisable}>Disable</button>
                         )}
-                        
-                        <button onClick={() => softDelete(a)} style={btnActionDelete}>Delete</button>
+
+                        <button onClick={() => softDelete(a)} style={btnActionDelete}>Remove</button>
                       </>
                     )}
                   </div>
@@ -236,6 +267,37 @@ export default function SuperAdminAdmins() {
           </div>
         )}
       </div>
+
+      {/* VIEW ADMIN MODAL */}
+      {viewAdmin && (
+        <div style={backdrop} onClick={() => setViewAdmin(null)}>
+          <div style={modalBox} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>Admin Details</h2>
+            <div style={viewRow}><b>Name:</b> {viewAdmin.displayName || "—"}</div>
+            <div style={viewRow}><b>Email:</b> {viewAdmin.email || "—"}</div>
+            <div style={viewRow}><b>Organisation:</b> {orgs.find(o => o.id === viewAdmin.orgId)?.name || "Unassigned/Deleted"}</div>
+            <div style={viewRow}><b>Status:</b> {viewAdmin.deleted ? "deleted" : (viewAdmin.status || "active")}</div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+              <button onClick={() => setViewAdmin(null)} style={btnSecondary}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT ADMIN MODAL */}
+      {editAdmin && (
+        <div style={backdrop} onClick={() => !saving && setEditAdmin(null)}>
+          <div style={modalBox} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>Edit Admin</h2>
+            <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>Full Name</label>
+            <input value={editName} onChange={(e) => setEditName(e.target.value)} style={inputStyle} />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+              <button onClick={() => setEditAdmin(null)} disabled={saving} style={btnSecondary}>Cancel</button>
+              <button onClick={saveEditAdmin} disabled={saving} style={btnRestore}>{saving ? "Saving..." : "Save Changes"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -254,6 +316,8 @@ const emptyBox = { padding: "60px", textAlign: "center", color: "#94a3b8", fontS
 /* 🟢 STRICT FIXED ACTION STYLES */
 const actionsWrapper = { display: "flex", alignItems: "center", gap: "8px" };
 
+const btnActionView = { height: "34px", width: "60px", padding: 0, background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: 6, cursor: "pointer", fontWeight: "bold", textAlign: "center" };
+const btnActionEdit = { height: "34px", width: "60px", padding: 0, background: "#eef2ff", color: "#4338ca", border: "1px solid #c7d2fe", borderRadius: 6, cursor: "pointer", fontWeight: "bold", textAlign: "center" };
 const btnActionReset = { height: "34px", width: "70px", padding: 0, background: "#fb8c00", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold", textAlign: "center" };
 const selectActionOrg = { height: "34px", width: "140px", padding: "0 8px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" };
 const btnActionEnable = { height: "34px", width: "80px", padding: 0, background: "#1e88e5", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold", textAlign: "center" };
@@ -270,3 +334,9 @@ const statusBadge = (status) => ({
     background: status === "deleted" ? "#ffebee" : (status === "disabled" ? "#fff3e0" : "#e8f5e9"),
     color: status === "deleted" ? "#c62828" : (status === "disabled" ? "#ef6c00" : "#2e7d32")
 });
+
+const backdrop = { position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(15, 23, 42, 0.6)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 9999 };
+const modalBox = { background: "#fff", padding: 24, borderRadius: 12, width: "420px", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" };
+const viewRow = { padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: 14 };
+const btnSecondary = { padding: "10px 16px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const inputStyle = { width: "100%", padding: "12px", borderRadius: 6, border: "1px solid #ccc", boxSizing: "border-box", fontSize: 15 };

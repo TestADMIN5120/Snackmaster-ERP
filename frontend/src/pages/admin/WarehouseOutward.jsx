@@ -10,10 +10,12 @@ export default function WarehouseOutward() {
   const [products, setProducts] = useState([]);
   const [refillers, setRefillers] = useState([]);
   const [machines, setMachines] = useState([]);
+  const [locations, setLocations] = useState([]);
 
   const [dateIssued, setDateIssued] = useState(new Date().toISOString().split('T')[0]);
   const [purpose, setPurpose] = useState("Manual Adjustment");
   const [remarks, setRemarks] = useState("");
+  const [locationId, setLocationId] = useState("");
 
   const [issuedBy, setIssuedBy] = useState("");
   const [refillerSearch, setRefillerSearch] = useState("");
@@ -28,9 +30,18 @@ export default function WarehouseOutward() {
     if (orgId) {
       loadProducts();
       loadRefillers();
-      loadMachines();
+      loadLocations();
     }
   }, [orgId]);
+
+  // 🟢 Reload machines whenever the selected refiller changes, scoped to that refiller only
+  useEffect(() => {
+    if (orgId && selectedRefiller) {
+      loadMachines(selectedRefiller.uid);
+    } else {
+      setMachines([]);
+    }
+  }, [orgId, selectedRefiller]);
 
   // 🟢 Default "Issued By" with logged-in user's name (fallback to email)
   useEffect(() => {
@@ -63,15 +74,30 @@ export default function WarehouseOutward() {
     setRefillers(list);
   }
 
-  // 🟢 Load machines for the "Destination" dropdowns
-  async function loadMachines() {
-    const q = query(collection(db, "machines"), where("orgId", "==", orgId));
+  // 🟢 Load machines for the "Destination" dropdowns — scoped to the selected refiller only
+  async function loadMachines(refillerId) {
+    const q = query(
+      collection(db, "machines"),
+      where("orgId", "==", orgId),
+      where("refillerId", "==", refillerId)
+    );
     const snap = await getDocs(q);
     const list = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(m => m.deleted !== true);
     list.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }));
     setMachines(list);
+  }
+
+  // 🟢 Load active locations for the "Location" dropdown
+  async function loadLocations() {
+    const q = query(collection(db, "locations"), where("deleted", "==", false));
+    const snap = await getDocs(q);
+    const list = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(l => l.status === "active");
+    list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    setLocations(list);
   }
 
   // 🟢 Helper for dropdown text
@@ -93,6 +119,7 @@ export default function WarehouseOutward() {
   async function handleOutward(e) {
     e.preventDefault();
     if (!dateIssued || !issuedBy) return alert("Fill Date Issued and Issued By.");
+    if (!locationId) return alert("Select a Location.");
     if (!selectedRefiller) return alert("Select a valid refiller from the Issued To dropdown.");
     if (!remarks.trim()) return alert("Remarks are mandatory.");
 
@@ -127,6 +154,8 @@ export default function WarehouseOutward() {
       const movementDate = new Date(dateIssued);
       const batch = writeBatch(db);
 
+      const location = locations.find(l => l.id === locationId);
+
       // One movement record per product + machine combination
       rows.forEach(r => {
         const p = products.find(x => x.id === r.productId);
@@ -142,6 +171,8 @@ export default function WarehouseOutward() {
           issuedBy: issuedBy,
           issuedTo: selectedRefiller.email,
           destination: r.machineId,
+          locationId: locationId,
+          locationName: location?.name || "",
           orgId: orgId,
           performedBy: user.email,
           createdAt: serverTimestamp()
@@ -160,6 +191,7 @@ export default function WarehouseOutward() {
 
       alert("✅ Stock deducted!");
       setRemarks("");
+      setLocationId("");
       setRefillerSearch(""); setSelectedRefiller(null);
       setRows([emptyRow()]);
       loadProducts();
@@ -176,7 +208,7 @@ export default function WarehouseOutward() {
       <h1 style={{ marginBottom: 5, color: "#1e293b" }}>📤 Manual Outward Stock</h1>
       <p style={{ color: "#64748b", marginBottom: 30 }}>Issue multiple products to a refiller across multiple machines, or deduct stock for adjustments.</p>
 
-      <div style={{ display: "flex", gap: 30, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 30 }}>
         <div style={card}>
           <form onSubmit={handleOutward} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
             <div style={{ display: "flex", gap: 15 }}>
@@ -186,6 +218,14 @@ export default function WarehouseOutward() {
                   <option value="Manual Adjustment">Manual Adjustment</option>
                   <option value="Transfer to Machine">Transfer to Machine</option>
                   <option value="Damaged">Damaged</option>
+                </select>
+              </label>
+              <label style={{...label, flex: 1}}>Location *
+                <select value={locationId} onChange={(e) => setLocationId(e.target.value)} style={input} required>
+                  <option value="">-- Select Location --</option>
+                  {locations.map(l => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
                 </select>
               </label>
             </div>
@@ -205,6 +245,8 @@ export default function WarehouseOutward() {
                       setRefillerSearch(e.target.value);
                       const matched = refillers.find(r => getRefillerLabel(r) === e.target.value);
                       setSelectedRefiller(matched || null);
+                      // Machines are scoped to the refiller, so reset any already-picked destinations
+                      setRows(prev => prev.map(r => ({ ...r, machineId: "" })));
                     }}
                     onFocus={(e) => e.target.select()}
                     style={input}
@@ -251,12 +293,25 @@ export default function WarehouseOutward() {
                   </label>
                   <label style={{...label, flex: 1.5}}>
                     Destination Machine *
-                    <select value={r.machineId} onChange={(e) => updateRow(i, { machineId: e.target.value })} style={input} required>
-                      <option value="">-- Select Machine --</option>
+                    <select
+                      value={r.machineId}
+                      onChange={(e) => updateRow(i, { machineId: e.target.value })}
+                      style={input}
+                      required
+                      disabled={!selectedRefiller}
+                    >
+                      <option value="">
+                        {selectedRefiller ? "-- Select Machine --" : "Select a refiller first"}
+                      </option>
                       {machines.map(m => (
                         <option key={m.id} value={m.id}>{m.id}{m.name ? ` - ${m.name}` : ""}{m.location ? ` (${m.location})` : ""}</option>
                       ))}
                     </select>
+                    {selectedRefiller && machines.length === 0 && (
+                      <span style={{ fontSize: 12, color: "#ef4444", fontWeight: "normal" }}>
+                        No machines assigned to this refiller.
+                      </span>
+                    )}
                   </label>
                   <button type="button" onClick={() => removeRow(i)} disabled={rows.length === 1} style={{...btnRemove, opacity: rows.length === 1 ? 0.4 : 1}} title="Remove row">✕</button>
                 </div>
@@ -275,7 +330,7 @@ export default function WarehouseOutward() {
           </form>
         </div>
 
-        <div style={{ ...card, flex: 1, minWidth: 300, background: "#f8fafc" }}>
+        <div style={{ ...card, background: "#f8fafc" }}>
           <h3 style={{ marginTop: 0, color: "#334155" }}>Available Stock</h3>
           <div style={{ maxHeight: 400, overflowY: "auto" }}>
             {products.map(p => (
@@ -291,7 +346,7 @@ export default function WarehouseOutward() {
   );
 }
 
-const card = { background: "#fff", padding: 25, borderRadius: 12, border: "1px solid #e2e8f0", flex: 1.5 };
+const card = { background: "#fff", padding: 25, borderRadius: 12, border: "1px solid #e2e8f0" };
 const label = { display: "flex", flexDirection: "column", gap: 6, fontSize: 13, fontWeight: "bold", color: "#475569" };
 const input = { padding: 12, borderRadius: 8, border: "1px solid #cbd5e1", outline: "none" };
 const btnDanger = { padding: 16, background: "#ef4444", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" };

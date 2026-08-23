@@ -3,6 +3,7 @@
 # 1. Ignore Secret Keys (CRITICAL)
 credentials.json
 serviceAccountKey.json
+serviceAccountKey.prod.json
 .serviceAccountKey.json
 client_secret.json
 key.json

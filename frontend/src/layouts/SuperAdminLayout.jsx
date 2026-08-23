@@ -57,7 +57,10 @@ export default function SuperAdminLayout() {
           <NavLink to="/super/insights" label="Insights" icon="📈" />
           <NavLink to="/super/orgs" label="Organisations" icon="🏢" />
           <NavLink to="/super/admins" label="Admins" icon="👔" />
+          <NavLink to="/super/refillers" label="Refillers" icon="🧑‍🔧" />
           <NavLink to="/super/machines" label="Machines" icon="🤖" />
+          <NavLink to="/super/locations" label="Locations" icon="📍" />
+          <NavLink to="/super/vendors" label="Vendors" icon="🚚" />
           <NavLink to="/super/issues" label="Issues" icon="🚨" />
           <NavLink to="/super/audit" label="Audit Logs" icon="📋" />
 

@@ -60,10 +60,15 @@ import SuperAdminOrganisations from "./pages/super/SuperAdminOrganisations";
 import SuperAdminOrgCreate from "./pages/super/SuperAdminOrgCreate";
 import SuperAdminAdmins from "./pages/super/SuperAdminAdmins";
 import SuperAdminAdminCreate from "./pages/super/SuperAdminAdminCreate";
+import SuperAdminRefillers from "./pages/super/SuperAdminRefillers";
 import SuperAdminMachines from "./pages/super/SuperAdminMachines";
 import SuperAdminMachineCreate from "./pages/super/SuperAdminMachineCreate";
 import SuperAdminAuditLogs from "./pages/super/SuperAdminAuditLogs";
 import SuperAdminIssues from "./pages/super/SuperAdminIssues";
+import SuperAdminLocations from "./pages/super/SuperAdminLocations";
+import SuperAdminLocationCreate from "./pages/super/SuperAdminLocationCreate";
+import SuperAdminVendors from "./pages/super/SuperAdminVendors";
+import SuperAdminVendorCreate from "./pages/super/SuperAdminVendorCreate";
 
 /* ───────── ROUTE GUARDS ───────── */
 import RequireAdmin from "./components/RequireAdmin";
@@ -135,8 +140,13 @@ function AppRoutes() {
         <Route path="orgs/create" element={<SuperAdminOrgCreate />} />
         <Route path="admins" element={<SuperAdminAdmins />} />
         <Route path="admins/create" element={<SuperAdminAdminCreate />} />
+        <Route path="refillers" element={<SuperAdminRefillers />} />
         <Route path="machines" element={<SuperAdminMachines />} />
         <Route path="machines/create" element={<SuperAdminMachineCreate />} />
+        <Route path="locations" element={<SuperAdminLocations />} />
+        <Route path="locations/create" element={<SuperAdminLocationCreate />} />
+        <Route path="vendors" element={<SuperAdminVendors />} />
+        <Route path="vendors/create" element={<SuperAdminVendorCreate />} />
         <Route path="audit" element={<SuperAdminAuditLogs />} />
         <Route path="issues" element={<SuperAdminIssues />} />
         <Route path="access-requests" element={<AccessRequests />} />

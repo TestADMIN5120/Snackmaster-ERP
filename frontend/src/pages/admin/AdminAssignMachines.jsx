@@ -75,7 +75,8 @@ export default function AdminAssignMachines() {
         refillerId: selectedRefiller,
         assignedEmail: refiller?.email || "",
         assignedAt: serverTimestamp(),
-        assignedTo: selectedRefiller // Kept for legacy support, but refillerId is the primary
+        assignedTo: selectedRefiller, // Kept for legacy support, but refillerId is the primary
+        assignedAdmin: user.email // Admin who performed this assignment
       });
 
       // Audit Log
@@ -107,6 +108,7 @@ export default function AdminAssignMachines() {
         refillerId: null,
         assignedTo: null,
         assignedEmail: null,
+        assignedAdmin: null,
         assignedAt: serverTimestamp()
       });
 
@@ -196,6 +198,11 @@ export default function AdminAssignMachines() {
                                 <div style={{ fontSize: 13, color: "#1976d2", fontWeight: "bold", marginTop: 4 }}>
                                     👤 {assignedUser?.displayName || m.assignedEmail || "Assigned"}
                                 </div>
+                                {m.assignedAdmin && (
+                                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                                        🛡️ Assigned by {m.assignedAdmin}
+                                    </div>
+                                )}
                             </div>
                             <button
                                 style={btnDanger}

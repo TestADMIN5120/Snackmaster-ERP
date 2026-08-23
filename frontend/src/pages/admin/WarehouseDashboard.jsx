@@ -5,20 +5,14 @@ import { useAdmin } from "../../contexts/AdminContext";
 import { generateBulkReportPDF } from "../../utils/pdfGenerator";
 
 export default function WarehouseDashboard() {
-  const { orgId, user } = useAdmin();
+  const { orgId } = useAdmin();
   const [loading, setLoading] = useState(true);
-
+  
   // Data States
   const [movements, setMovements] = useState([]);
   const [products, setProducts] = useState([]); // Restored products state
   const [masterProducts, setMasterProducts] = useState([]); // Catalog for product search suggestions
-  const [machines, setMachines] = useState([]); // Destination options for the Outward edit modal
   const [userNames, setUserNames] = useState({}); // email -> displayName (to show names instead of emails)
-
-  // 🟢 Outward Edit/Delete state
-  const [editMov, setEditMov] = useState(null); // movement being edited (OUTWARD_MANUAL only)
-  const [editForm, setEditForm] = useState({ dateIssued: "", qty: "", machineId: "", purpose: "Manual Adjustment", remarks: "", issuedBy: "" });
-  const [savingEdit, setSavingEdit] = useState(false);
 
   // Section 1: Movements UI State
   const [activeTab, setActiveTab] = useState("STOCK");
@@ -56,15 +50,6 @@ export default function WarehouseDashboard() {
         .map(d => ({ id: d.id, name: d.data().name, sku: d.data().sku || "N/A" }));
       catalog.sort((a, b) => (a.sku || "").toString().toLowerCase().localeCompare((b.sku || "").toString().toLowerCase(), undefined, { numeric: true, sensitivity: 'base' }));
       setMasterProducts(catalog);
-
-      // Fetch machines for the Outward edit modal's destination dropdown
-      const machQ = query(collection(db, "machines"), where("orgId", "==", orgId));
-      const machSnap = await getDocs(machQ);
-      const machList = machSnap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(mm => mm.deleted !== true);
-      machList.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }));
-      setMachines(machList);
 
       // Fetch org users to map emails -> display names (old records store emails in issuedBy/performedBy)
       const usersQ = query(collection(db, "users"), where("orgId", "==", orgId));
@@ -494,7 +479,6 @@ export default function WarehouseDashboard() {
                   <th style={th}>Qty</th>
                   <th style={th}>Ref / Remarks</th>
                   {personColumns.map(c => <th key={c.label} style={th}>{c.label}</th>)}
-                  {activeTab === "OUTWARD" && <th style={th}>Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -509,18 +493,6 @@ export default function WarehouseDashboard() {
                     </td>
                     <td style={{...td, color: "#64748b"}}>{m.referenceId || m.remarks || "-"}</td>
                     {personColumns.map(c => <td key={c.label} style={td}>{c.value(m)}</td>)}
-                    {activeTab === "OUTWARD" && (
-                      <td style={{...td, whiteSpace: "nowrap"}}>
-                        {m.type === "OUTWARD_MANUAL" ? (
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <button onClick={() => openEdit(m)} style={btnEdit} title="Edit record">✏️ Edit</button>
-                            <button onClick={() => handleDeleteOutward(m)} style={btnDelete} title="Delete record and restore stock">🗑️ Delete</button>
-                          </div>
-                        ) : (
-                          <span style={{ color: "#94a3b8", fontSize: 12 }} title="Kit dispatches are managed from the Kits section">Kit — locked</span>
-                        )}
-                      </td>
-                    )}
                   </tr>
                 ))}
               </tbody>
@@ -637,9 +609,3 @@ const td = { padding: "11px 16px", color: "#334155" };
 const skuChip = { fontFamily: "monospace", background: "#f1f5f9", border: "1px solid #e2e8f0", padding: "3px 9px", borderRadius: 6, fontSize: 12.5, color: "#475569", fontWeight: 600 };
 const paginationRow = { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 15 };
 const btnPage = { padding: "7px 14px", background: "#eaf3f5", border: "1px solid #b7d4da", borderRadius: 6, cursor: "pointer", fontWeight: "bold", color: "#357683" };
-const btnEdit = { padding: "6px 12px", background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 6, cursor: "pointer", fontWeight: "bold", fontSize: 12.5, whiteSpace: "nowrap" };
-const btnDelete = { padding: "6px 12px", background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca", borderRadius: 6, cursor: "pointer", fontWeight: "bold", fontSize: 12.5, whiteSpace: "nowrap" };
-const modalOverlay = { position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 };
-const modalBox = { background: "#fff", padding: 24, borderRadius: 12, width: "100%", maxWidth: 540, boxShadow: "0 10px 40px rgba(0,0,0,0.25)", maxHeight: "90vh", overflowY: "auto" };
-const btnCancel = { padding: "10px 20px", background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
-const btnSave = { padding: "10px 20px", background: "var(--fx-teal)", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };

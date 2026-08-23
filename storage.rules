@@ -1,0 +1,40 @@
+rules_version = '2';
+
+// SnackMaster ERP — Firebase Storage security rules
+//
+// Auth model mirrors firestore.rules: Firebase Auth + a `users/{uid}` Firestore
+// doc holding { role, orgId, status, deleted }. Roles: super_admin | admin | refiller.
+//
+// Deploy: firebase deploy --only storage
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isStaff() {
+      return isSignedIn()
+        && me().role in ['super_admin', 'admin']
+        && me().deleted != true
+        && me().status != 'disabled';
+    }
+
+    // ── Refiller identity/address proof documents ──────────────────────
+    // Uploaded by admins when creating/editing a refiller on their team.
+    // Only staff (admin/super_admin) may read or write these.
+    match /refiller_docs/{userId}/{fileName} {
+      allow read, write: if isStaff();
+    }
+
+    // ── Everything else: denied ─────────────────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

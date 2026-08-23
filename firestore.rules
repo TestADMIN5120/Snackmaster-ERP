@@ -1,0 +1,151 @@
+rules_version = '2';
+
+// SnackMaster ERP — Firestore security rules
+//
+// Auth model: Firebase Auth + a `users/{uid}` doc holding { role, orgId, status, deleted }.
+// Roles: super_admin | admin | refiller. The backend and Cloud Functions use the
+// Admin SDK, which bypasses these rules — they only govern the web client.
+//
+// Deploy: firebase deploy --only firestore:rules
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Caller's own users/{uid} doc. Firestore caches repeated get()s of the
+    // same doc within one request, so multiple calls cost a single read.
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(roles) {
+      return isSignedIn()
+        && me().role in roles
+        && me().deleted != true
+        && me().status != 'disabled';
+    }
+
+    function isSuper()  { return hasRole(['super_admin']); }
+    function isStaff()  { return hasRole(['super_admin', 'admin']); }
+    function isWorker() { return hasRole(['super_admin', 'admin', 'refiller']); }
+
+    // ── Users ───────────────────────────────────────────────────────────
+    // Own-doc read must NOT require an active status: AdminContext listens to
+    // it to detect disabled/deleted accounts and force sign-out.
+    // Staff create user docs for other uids via createSecondaryUser().
+    match /users/{userId} {
+      allow read: if (isSignedIn() && request.auth.uid == userId) || isStaff();
+      allow create, update, delete: if isStaff();
+    }
+
+    // ── Organisations ───────────────────────────────────────────────────
+    // AdminLayout keeps a live listener on the caller's org doc.
+    match /organisations/{orgId} {
+      allow read: if isWorker();
+      allow write: if isSuper();
+    }
+
+    // ── Locations ───────────────────────────────────────────────────────
+    // Global (not org-scoped) master data managed by Super Admin. Staff need
+    // read access to populate the Location dropdown on Warehouse Outward.
+    match /locations/{locationId} {
+      allow read: if isStaff();
+      allow write: if isSuper();
+    }
+
+    // ── Vendors ─────────────────────────────────────────────────────────
+    // Global (not org-scoped) master data managed by Super Admin.
+    match /vendors/{vendorId} {
+      allow read: if isStaff();
+      allow write: if isSuper();
+    }
+
+    // ── Machines (+ slots subcollection) ────────────────────────────────
+    // Refillers update machine docs and slots during refills; only staff
+    // create or remove machines.
+    match /machines/{machineId} {
+      allow read, update: if isWorker();
+      allow create, delete: if isStaff();
+
+      match /slots/{slotId} {
+        allow read, write: if isWorker();
+      }
+    }
+
+    // ── Refill logs ─────────────────────────────────────────────────────
+    match /refill_logs/{logId} {
+      allow read, create: if isWorker();
+      allow update, delete: if isStaff();
+    }
+
+    // ── Products (org stock) ────────────────────────────────────────────
+    // Refillers decrement stock when refilling.
+    match /products/{productId} {
+      allow read, update: if isWorker();
+      allow create, delete: if isStaff();
+    }
+
+    // ── Master products ─────────────────────────────────────────────────
+    match /master_products/{productId} {
+      allow read: if isWorker();
+      allow write: if isStaff();
+    }
+
+    // ── Kits ────────────────────────────────────────────────────────────
+    // Refillers build kits (RefillerMakeKit) and mark them used.
+    match /kits/{kitId} {
+      allow read, create, update: if isWorker();
+      allow delete: if isStaff();
+    }
+
+    // ── Warehouse movements ─────────────────────────────────────────────
+    // Refill flows append movements; only staff correct or remove them.
+    match /warehouse_movements/{movementId} {
+      allow read, create: if isWorker();
+      allow update, delete: if isStaff();
+    }
+
+    // ── Machine issues ──────────────────────────────────────────────────
+    // Refillers report issues; staff triage them.
+    match /machine_issues/{issueId} {
+      allow create: if isWorker();
+      allow read, update, delete: if isStaff();
+    }
+
+    // ── Audit log ───────────────────────────────────────────────────────
+    // Append-only from the client: no updates or deletes, ever.
+    match /admin_actions/{actionId} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+
+    // ── Password reset requests ─────────────────────────────────────────
+    // Created UNAUTHENTICATED from the login page ("forgot password"), so
+    // create is open but locked to exactly the fields the form sends.
+    match /password_requests/{requestId} {
+      allow create: if request.resource.data.keys().hasOnly(['email', 'status', 'requestedAt'])
+                    && request.resource.data.email is string
+                    && request.resource.data.email.size() > 3
+                    && request.resource.data.email.size() < 255
+                    && request.resource.data.status == 'pending';
+      allow read, update, delete: if isStaff();
+    }
+
+    // ── Sales & financials ──────────────────────────────────────────────
+    match /sales_transactions/{txId} {
+      allow read, write: if isStaff();
+    }
+
+    match /sales_upload_logs/{logId} {
+      allow read, write: if isStaff();
+    }
+
+    // ── Everything else: denied ─────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

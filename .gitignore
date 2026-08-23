@@ -8,7 +8,7 @@ serviceAccountKey.prod.json
 client_secret.json
 key.json
 snackmaster-refill-firebase-adminsdk-fbsvc-e01d5d273a.json
-*firebase-adminsdk*.json
+*-firebase-adminsdk-*.json
 
 # 2. Ignore Environment Variables (CRITICAL)
 .env
@@ -30,6 +30,7 @@ dist/
 build/
 frontend/dist/
 frontend/build/
+frontend/.vercel/
 
 # 5. Ignore System & Error files
 .DS_Store

@@ -2,20 +2,33 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="60b9acf3-b138-4702-8b26-625931c770d1" name="Changes" comment="edit and delete options for outward stock and  remarks as mandatory">
-      <change beforePath="$PROJECT_DIR$/.firebaserc" beforeDir="false" afterPath="$PROJECT_DIR$/.firebaserc" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/Snackmaster-ERP-main.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/claudeCodeEditorTabs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/FIXES_REFILLER_TRACKING_LEDGER.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/LOCAL_SETUP.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/RECONCILIATION.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/RECONCILIATION.pdf" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/RECONCILIATION_FUNCTIONAL.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/RECONCILIATION_FUNCTIONAL.pdf" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/SM DOCUMENT.pdf" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/STYLE_CHANGES_FINEX_THEME.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/STYLE_CHANGES_WAREHOUSE.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backend/deployFirestoreRules.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/firestore.rules" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/product_images/.gitkeep" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/product_images/PROD_SM002_1785645686844.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/product_images/PROD_SM003_1785645747096.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/product_images/PROD_SM004_1785684273781.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/test-vendor-formats.mjs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/test-sales-report-2.csv" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/test-sales-report.csv" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/firebase.json" beforeDir="false" afterPath="$PROJECT_DIR$/firebase.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/.env.production" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/.env.production" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/EditMachineModal.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/EditMachineModal.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/layouts/SuperAdminLayout.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/layouts/SuperAdminLayout.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/main.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/main.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/admin/AdminAssignMachines.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/admin/AdminAssignMachines.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/admin/AdminUsers.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/admin/AdminUsers.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/pages/admin/WarehouseDashboard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/admin/WarehouseDashboard.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/pages/admin/WarehouseOutward.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/admin/WarehouseOutward.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/super/SuperAdminAdmins.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/super/SuperAdminAdmins.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/super/SuperAdminMachineCreate.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/super/SuperAdminMachineCreate.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/super/SuperAdminMachines.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/super/SuperAdminMachines.jsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -39,21 +52,21 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
-    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
-    &quot;copilot.chat.legacySessionMetadata.migrated&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/Public/Softwares/Snackmaster/Snackmaster-ERP/frontend&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "copilot.chat.legacySessionMetadata.migrated": "true",
+    "git-widget-placeholder": "Merging main",
+    "last_opened_file_path": "C:/Users/Public/Softwares/Snackmaster/Snackmaster-ERP/frontend",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "preferences.pluginManager"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\Public\Softwares\Snackmaster\Snackmaster-ERP\frontend" />
@@ -100,7 +113,15 @@
       <option name="project" value="LOCAL" />
       <updated>1787010458565</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="edit and delete options for outward stock and  remarks as mandatory">
+      <option name="closed" value="true" />
+      <created>1787480523142</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1787480523142</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -144,6 +165,11 @@
             </State>
           </value>
         </entry>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
       </map>
     </option>
   </component>
@@ -152,6 +178,7 @@
     <MESSAGE value=" change Performed by to Received By&#10; and related in all 3" />
     <MESSAGE value="new screen changes" />
     <MESSAGE value="edit and delete options for outward stock and  remarks as mandatory" />
-    <option name="LAST_COMMIT_MESSAGE" value="edit and delete options for outward stock and  remarks as mandatory" />
+    <MESSAGE value="refiller and db changes" />
+    <option name="LAST_COMMIT_MESSAGE" value="refiller and db changes" />
   </component>
 </project>

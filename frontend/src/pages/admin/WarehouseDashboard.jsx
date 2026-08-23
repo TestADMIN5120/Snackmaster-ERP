@@ -5,14 +5,20 @@ import { useAdmin } from "../../contexts/AdminContext";
 import { generateBulkReportPDF } from "../../utils/pdfGenerator";
 
 export default function WarehouseDashboard() {
-  const { orgId } = useAdmin();
+  const { orgId, user } = useAdmin();
   const [loading, setLoading] = useState(true);
-  
+
   // Data States
   const [movements, setMovements] = useState([]);
   const [products, setProducts] = useState([]); // Restored products state
   const [masterProducts, setMasterProducts] = useState([]); // Catalog for product search suggestions
+  const [machines, setMachines] = useState([]); // Destination options for the Outward edit modal
   const [userNames, setUserNames] = useState({}); // email -> displayName (to show names instead of emails)
+
+  // 🟢 Outward Edit/Delete state
+  const [editMov, setEditMov] = useState(null); // movement being edited (OUTWARD_MANUAL only)
+  const [editForm, setEditForm] = useState({ dateIssued: "", qty: "", machineId: "", purpose: "Manual Adjustment", remarks: "", issuedBy: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Section 1: Movements UI State
   const [activeTab, setActiveTab] = useState("STOCK");
@@ -50,6 +56,15 @@ export default function WarehouseDashboard() {
         .map(d => ({ id: d.id, name: d.data().name, sku: d.data().sku || "N/A" }));
       catalog.sort((a, b) => (a.sku || "").toString().toLowerCase().localeCompare((b.sku || "").toString().toLowerCase(), undefined, { numeric: true, sensitivity: 'base' }));
       setMasterProducts(catalog);
+
+      // Fetch machines for the Outward edit modal's destination dropdown
+      const machQ = query(collection(db, "machines"), where("orgId", "==", orgId));
+      const machSnap = await getDocs(machQ);
+      const machList = machSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(mm => mm.deleted !== true);
+      machList.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }));
+      setMachines(machList);
 
       // Fetch org users to map emails -> display names (old records store emails in issuedBy/performedBy)
       const usersQ = query(collection(db, "users"), where("orgId", "==", orgId));

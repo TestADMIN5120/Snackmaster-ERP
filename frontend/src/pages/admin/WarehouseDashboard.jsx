@@ -12,6 +12,7 @@ export default function WarehouseDashboard() {
   const [movements, setMovements] = useState([]);
   const [products, setProducts] = useState([]); // Restored products state
   const [masterProducts, setMasterProducts] = useState([]); // Catalog for product search suggestions
+  const [userNames, setUserNames] = useState({}); // email -> displayName (to show names instead of emails)
 
   // Section 1: Movements UI State
   const [activeTab, setActiveTab] = useState("STOCK");
@@ -49,6 +50,16 @@ export default function WarehouseDashboard() {
         .map(d => ({ id: d.id, name: d.data().name, sku: d.data().sku || "N/A" }));
       catalog.sort((a, b) => (a.sku || "").toString().toLowerCase().localeCompare((b.sku || "").toString().toLowerCase(), undefined, { numeric: true, sensitivity: 'base' }));
       setMasterProducts(catalog);
+
+      // Fetch org users to map emails -> display names (old records store emails in issuedBy/performedBy)
+      const usersQ = query(collection(db, "users"), where("orgId", "==", orgId));
+      const usersSnap = await getDocs(usersQ);
+      const names = {};
+      usersSnap.docs.forEach(d => {
+        const u = d.data();
+        if (u.email && u.displayName) names[u.email] = u.displayName;
+      });
+      setUserNames(names);
 
     } catch (err) {
       console.error("Dashboard Load Error:", err);
@@ -165,17 +176,20 @@ export default function WarehouseDashboard() {
   // Person columns per movement tab: Inward shows the receiver, Outward the issuer + refiller,
   // Returned the receiver + returner. Values come from the traceability fields captured on each
   // form (issuedBy/issuedTo), falling back to performedBy for older records without them.
+  // Resolve stored emails to display names (falls back to the raw value)
+  const displayPerson = (v) => (v && userNames[v]) || v;
+
   const PERSON_COLUMNS = {
-    INWARD: [{ label: "Received By", value: (m) => m.issuedTo || m.performedBy || "Admin" }],
+    INWARD: [{ label: "Received By", value: (m) => displayPerson(m.issuedTo || m.performedBy) || "Admin" }],
     OUTWARD: [
-      { label: "Issue By", value: (m) => m.issuedBy || m.performedBy || "Admin" },
-      { label: "Refiller", value: (m) => m.issuedTo || "-" },
+      { label: "Issue By", value: (m) => displayPerson(m.issuedBy || m.performedBy) || "Admin" },
+      { label: "Refiller", value: (m) => displayPerson(m.issuedTo) || "-" },
     ],
     RETURN: [
-      { label: "Received By", value: (m) => m.issuedTo || m.performedBy || "Admin" },
-      { label: "Returned By", value: (m) => m.issuedBy || "-" },
+      { label: "Received By", value: (m) => displayPerson(m.issuedTo || m.performedBy) || "Admin" },
+      { label: "Returned By", value: (m) => displayPerson(m.issuedBy) || "-" },
     ],
-    EXPIRED_DAMAGED: [{ label: "Performed By", value: (m) => m.performedBy || "Admin" }],
+    EXPIRED_DAMAGED: [{ label: "Performed By", value: (m) => displayPerson(m.performedBy) || "Admin" }],
   };
   const personColumns = PERSON_COLUMNS[activeTab] || PERSON_COLUMNS.EXPIRED_DAMAGED;
 

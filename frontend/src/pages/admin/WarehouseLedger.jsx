@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, getDocs } from "firebase/firestore";
 import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
 import { generateBulkReportPDF } from "../../utils/pdfGenerator"; 
@@ -8,6 +8,19 @@ export default function WarehouseLedger() {
   const { orgId } = useAdmin();
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userNames, setUserNames] = useState({}); // email -> displayName
+
+  useEffect(() => {
+    if (!orgId) return;
+    getDocs(query(collection(db, "users"), where("orgId", "==", orgId))).then(snap => {
+      const names = {};
+      snap.docs.forEach(d => {
+        const u = d.data();
+        if (u.email && u.displayName) names[u.email] = u.displayName;
+      });
+      setUserNames(names);
+    }).catch(err => console.error("Users Read Error:", err));
+  }, [orgId]);
 
   // Filters
   const [search, setSearch] = useState("");
@@ -65,23 +78,26 @@ export default function WarehouseLedger() {
 
   // Person labels per movement type: Inward shows the receiver, Outward the issuer + refiller,
   // Returned the receiver + returner. Falls back to performedBy for older records.
+  // Resolve stored emails to display names (falls back to the raw value)
+  const displayPerson = (v) => (v && userNames[v]) || v;
+
   const getPersonInfo = (m) => {
     switch (m.type) {
       case "INWARD":
-        return [{ label: "Received By", value: m.issuedTo || m.performedBy || "Admin" }];
+        return [{ label: "Received By", value: displayPerson(m.issuedTo || m.performedBy) || "Admin" }];
       case "OUTWARD_KIT":
       case "OUTWARD_MANUAL":
         return [
-          { label: "Issue By", value: m.issuedBy || m.performedBy || "Admin" },
-          { label: "Refiller", value: m.issuedTo || "-" },
+          { label: "Issue By", value: displayPerson(m.issuedBy || m.performedBy) || "Admin" },
+          { label: "Refiller", value: displayPerson(m.issuedTo) || "-" },
         ];
       case "RETURN":
         return [
-          { label: "Received By", value: m.issuedTo || m.performedBy || "Admin" },
-          { label: "Returned By", value: m.issuedBy || "-" },
+          { label: "Received By", value: displayPerson(m.issuedTo || m.performedBy) || "Admin" },
+          { label: "Returned By", value: displayPerson(m.issuedBy) || "-" },
         ];
       default:
-        return [{ label: "Performed By", value: m.performedBy || "Admin" }];
+        return [{ label: "Performed By", value: displayPerson(m.performedBy) || "Admin" }];
     }
   };
 

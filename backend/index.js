@@ -43,6 +43,29 @@ app.use("/product_images", express.static(PRODUCT_IMAGES_DIR, { maxAge: "365d", 
 
 const IMAGE_TYPES = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
 
+/* ──────────────────────────────────────────────
+   📄 REFILLER DOCUMENTS — stored in <repo>/refiller_documents,
+   each file exposed at /refiller_documents/<filename>
+────────────────────────────────────────────── */
+const REFILLER_DOCS_DIR = path.join(__dirname, "..", "refiller_documents");
+fs.mkdirSync(REFILLER_DOCS_DIR, { recursive: true });
+
+app.use("/refiller_documents", express.static(REFILLER_DOCS_DIR, { maxAge: "365d", immutable: true }));
+
+const DOC_TYPES = {
+  "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
+  "application/pdf": ".pdf"
+};
+
+const docUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (req, file, cb) => {
+    if (DOC_TYPES[file.mimetype]) cb(null, true);
+    else cb(new Error("Only JPG, PNG, WEBP or PDF files are allowed."));
+  }
+});
+
 const imageUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
@@ -145,7 +168,72 @@ app.delete("/api/product-images/:productId", requireAdmin, async (req, res) => {
 });
 
 /* ──────────────────────────────────────────────
-   CONFIRM REFILL API 
+   📄 REFILLER DOCUMENT UPLOAD / DELETE
+────────────────────────────────────────────── */
+const removeRefillerDocFiles = (userId) =>
+  fs.readdirSync(REFILLER_DOCS_DIR)
+    .filter((f) => f.startsWith(`${userId}_`))
+    .forEach((f) => fs.unlinkSync(path.join(REFILLER_DOCS_DIR, f)));
+
+// ADD / REPLACE identity proof document (multipart field: "document")
+app.post("/api/refiller-documents/:userId", requireAdmin, (req, res) => {
+  docUpload.single("document")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "No document file received" });
+
+    try {
+      const userId = req.params.userId;
+      if (!/^[A-Za-z0-9_-]+$/.test(userId)) {
+        return res.status(400).json({ error: "Invalid user id" });
+      }
+
+      const userSnap = await db.collection("users").doc(userId).get();
+      if (!userSnap.exists) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      removeRefillerDocFiles(userId); // replace = drop old file
+      const filename = `${userId}_${Date.now()}${DOC_TYPES[req.file.mimetype]}`;
+      fs.writeFileSync(path.join(REFILLER_DOCS_DIR, filename), req.file.buffer);
+
+      const identityProofUrl = `/refiller_documents/${filename}`;
+      await db.collection("users").doc(userId).update({ identityProofUrl });
+
+      res.json({ ok: true, identityProofUrl });
+    } catch (error) {
+      console.error("Refiller document upload error:", error);
+      res.status(500).json({ error: "Failed to save document" });
+    }
+  });
+});
+
+// DELETE identity proof document
+app.delete("/api/refiller-documents/:userId", requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!/^[A-Za-z0-9_-]+$/.test(userId)) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+
+    const userSnap = await db.collection("users").doc(userId).get();
+    if (!userSnap.exists) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    removeRefillerDocFiles(userId);
+    await db.collection("users").doc(userId).update({
+      identityProofUrl: admin.firestore.FieldValue.delete()
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Refiller document delete error:", error);
+    res.status(500).json({ error: "Failed to delete document" });
+  }
+});
+
+/* ──────────────────────────────────────────────
+   CONFIRM REFILL API
 ────────────────────────────────────────────── */
 app.post("/api/confirm-refill", async (req, res) => {
   const { machineId, orgId, refillerId, userEmail, kitId, products, returnedItems } = req.body;

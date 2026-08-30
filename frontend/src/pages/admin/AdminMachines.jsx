@@ -53,6 +53,11 @@ export default function AdminMachines() {
             </div>
             
             <div style={{ fontSize: 13, color: "#64748b", fontFamily: "monospace" }}>ID: {m.id}</div>
+            {m.machineType && (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#7c3aed", fontWeight: 600, background: "#f5f3ff", padding: "2px 8px", borderRadius: 4, display: "inline-block" }}>
+                {m.machineType}
+              </div>
+            )}
             
             {/* 🟢 UPDATED: Location with Google Maps Button */}
             <div style={{ marginTop: 15, fontSize: 14, color: "#475569", display: "flex", justifyContent: "space-between", alignItems: "center" }}>

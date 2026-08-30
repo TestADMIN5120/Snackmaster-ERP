@@ -1,40 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { db } from "../firebaseClient";
-import { doc, updateDoc, serverTimestamp, addDoc, collection, getDocs, query, where } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, addDoc, collection } from "firebase/firestore";
 
 export default function EditMachineModal({ machine, onClose }) {
   const [name, setName] = useState(machine.name || "");
   const [location, setLocation] = useState(machine.location || "");
-  const [locationId, setLocationId] = useState(machine.locationId || "");
-  const [vendorId, setVendorId] = useState(machine.vendorId || "");
   const [capacity, setCapacity] = useState(machine.capacity || "");
+  const [machineType, setMachineType] = useState(machine.machineType || "");
   const [status, setStatus] = useState(machine.status || "active");
   const [saving, setSaving] = useState(false);
-  const [locations, setLocations] = useState([]);
-  const [vendors, setVendors] = useState([]);
-
-  useEffect(() => {
-    async function loadLocations() {
-      try {
-        const q = query(collection(db, "locations"), where("deleted", "==", false));
-        const snap = await getDocs(q);
-        setLocations(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) {
-        console.error("Failed to load locations", err);
-      }
-    }
-    async function loadVendors() {
-      try {
-        const q = query(collection(db, "vendors"), where("deleted", "==", false));
-        const snap = await getDocs(q);
-        setVendors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) {
-        console.error("Failed to load vendors", err);
-      }
-    }
-    loadLocations();
-    loadVendors();
-  }, []);
 
   async function saveChanges() {
     if (!machine.id) return alert("Machine ID missing.");
@@ -44,9 +18,8 @@ export default function EditMachineModal({ machine, onClose }) {
       await updateDoc(doc(db, "machines", machine.id), {
         name: name.trim(),
         location: location.trim(),
-        locationId: locationId || null,
-        vendorId: vendorId || null,
         capacity: Number(capacity),
+        machineType: machineType || null,
         status,
         updatedAt: serverTimestamp()
       });
@@ -57,7 +30,7 @@ export default function EditMachineModal({ machine, onClose }) {
         actionType: "edit_machine",
         machineId: machine.id,
         orgId: machine.orgId || "unknown", // 🟢 Critical Multi-Tenant Fix
-        changes: { name, location, locationId, vendorId, capacity, status },
+        changes: { name, location, capacity, machineType, status },
         createdAt: serverTimestamp()
       });
 
@@ -83,28 +56,17 @@ export default function EditMachineModal({ machine, onClose }) {
         </div>
 
         <div style={field}>
+          <label style={label}>Machine Type</label>
+          <select style={input} value={machineType} onChange={(e) => setMachineType(e.target.value)}>
+            <option value="">-- Select Type --</option>
+            <option value="Coffee Vending">Coffee Vending</option>
+            <option value="Snacks Combo Vending">Snacks Combo Vending</option>
+          </select>
+        </div>
+
+        <div style={field}>
           <label style={label}>Location</label>
           <input style={input} value={location} onChange={(e) => setLocation(e.target.value)} />
-        </div>
-
-        <div style={field}>
-          <label style={label}>Location (Master)</label>
-          <select style={input} value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-            <option value="">-- Select Location --</option>
-            {locations.map(loc => (
-              <option key={loc.id} value={loc.id}>{loc.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div style={field}>
-          <label style={label}>Vendor</label>
-          <select style={input} value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
-            <option value="">-- Select Vendor --</option>
-            {vendors.map(v => (
-              <option key={v.id} value={v.id}>{v.name}</option>
-            ))}
-          </select>
         </div>
 
         <div style={field}>

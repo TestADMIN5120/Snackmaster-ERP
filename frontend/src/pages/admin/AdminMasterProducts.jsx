@@ -21,6 +21,7 @@ export default function AdminMasterProducts() {
   const [gstRate, setGstRate] = useState("");
   const [costWithGst, setCostWithGst] = useState("");
   const [costWithoutGst, setCostWithoutGst] = useState("");
+  const [hsnCode, setHsnCode] = useState("");
   const [barcode, setBarcode] = useState("");
   const [shelfLifeDays, setShelfLifeDays] = useState("");
 
@@ -58,8 +59,8 @@ export default function AdminMasterProducts() {
 
   function resetForm() {
     setEditingId(null);
-    setSku(""); setName(""); setMrp(""); setCategory(""); setBrand(""); 
-    setUnitSize(""); setMargin(""); setGstRate(""); setCostWithGst(""); setCostWithoutGst("");
+    setSku(""); setName(""); setMrp(""); setCategory(""); setBrand("");
+    setUnitSize(""); setMargin(""); setGstRate(""); setHsnCode(""); setCostWithGst(""); setCostWithoutGst("");
     setBarcode(""); setShelfLifeDays("");
   }
 
@@ -73,6 +74,7 @@ export default function AdminMasterProducts() {
     setUnitSize(product.unitSize || "");
     setMargin(product.marginPercent || "");
     setGstRate(product.gstRatePercent || "");
+    setHsnCode(product.hsnCode || "");
     setCostWithGst(product.costWithGst || "");
     setCostWithoutGst(product.costWithoutGst || "");
     setBarcode(product.barcode || "");
@@ -133,6 +135,7 @@ export default function AdminMasterProducts() {
         mrp: Math.max(0, Number(mrp) || 0),
         marginPercent: Math.max(0, Number(margin) || 0),
         gstRatePercent: Math.max(0, Number(gstRate) || 0),
+        hsnCode: hsnCode.trim() || "",
         costWithGst: Math.max(0, Number(costWithGst) || 0),
         costWithoutGst: Math.max(0, Number(costWithoutGst) || 0),
         barcode: barcode.trim() || "",
@@ -213,6 +216,7 @@ export default function AdminMasterProducts() {
             <label style={label}>Cost Price (+GST) ₹ <input type="number" step="0.01" min="0" value={costWithGst} onChange={handlePositiveNumber(setCostWithGst)} style={input} placeholder="15.00" /></label>
             <label style={label}>Cost Price (W/O GST) ₹ <input type="number" step="0.01" min="0" value={costWithoutGst} onChange={handlePositiveNumber(setCostWithoutGst)} style={input} placeholder="13.50" /></label>
             <label style={label}>GST Rate (%) <input type="number" step="0.01" min="0" value={gstRate} onChange={handlePositiveNumber(setGstRate)} style={input} placeholder="12" /></label>
+            <label style={label}>HSN / SAC Code <input type="text" value={hsnCode} onChange={e=>setHsnCode(e.target.value)} style={input} placeholder="e.g. 21069099" /></label>
             <label style={label}>Margin (%) <input type="number" step="0.01" min="0" value={margin} onChange={handlePositiveNumber(setMargin)} style={input} placeholder="25" /></label>
           </div>
 
@@ -254,6 +258,8 @@ export default function AdminMasterProducts() {
                   <th style={th}>Status</th> 
                   <th style={th}>MRP ₹</th>
                   <th style={th}>Cost (+GST) ₹</th>
+                  <th style={th}>GST %</th>
+                  <th style={th}>HSN Code</th>
                   <th style={th}>Shelf Life</th>
                   <th style={th}>Actions</th>
                 </tr>
@@ -281,6 +287,8 @@ export default function AdminMasterProducts() {
 
                       <td style={{...td, fontWeight: "bold", color: isActive ? "#16a34a" : "#94a3b8"}}>{p.mrp}</td>
                       <td style={{...td, color: isActive ? "#0f172a" : "#94a3b8"}}>{p.costWithGst}</td>
+                      <td style={{...td, color: isActive ? "#0f172a" : "#94a3b8"}}>{p.gstRatePercent ? `${p.gstRatePercent}%` : "-"}</td>
+                      <td style={{...td, fontFamily: "monospace", color: isActive ? "#0f172a" : "#94a3b8"}}>{p.hsnCode || "-"}</td>
                       <td style={td}>
                         {p.shelfLifeDays ? <span style={{background: "#e0f2fe", color: "#0369a1", padding: "2px 6px", borderRadius: 4, fontSize: 11, fontWeight: "bold"}}>{p.shelfLifeDays} Days</span> : <span style={{color: "#cbd5e1"}}>N/A</span>}
                       </td>

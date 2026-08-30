@@ -121,6 +121,7 @@ export default function WarehouseOutward() {
     if (!dateIssued || !issuedBy) return alert("Fill Date Issued and Issued By.");
     if (!locationId) return alert("Select a Location.");
     if (!selectedRefiller) return alert("Select a valid refiller from the Issued To dropdown.");
+    if (!remarks.trim()) return alert("Remarks are mandatory.");
 
     // Validate every row
     for (let i = 0; i < rows.length; i++) {
@@ -166,7 +167,7 @@ export default function WarehouseOutward() {
           quantity: Number(r.qty),
           movementDate: Timestamp.fromDate(movementDate),
           purpose: purpose,
-          remarks: remarks || "",
+          remarks: remarks.trim(),
           issuedBy: issuedBy,
           issuedTo: selectedRefiller.email,
           destination: r.machineId,
@@ -211,7 +212,7 @@ export default function WarehouseOutward() {
         <div style={card}>
           <form onSubmit={handleOutward} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
             <div style={{ display: "flex", gap: 15 }}>
-              <label style={{...label, flex: 1}}>Date Issued * <input type="date" value={dateIssued} onChange={(e) => setDateIssued(e.target.value)} style={input} required /></label>
+              <label style={{...label, flex: 1}}>Date Issued * <input type="date" value={dateIssued} disabled style={{...input, background: "#f1f5f9", cursor: "not-allowed", pointerEvents: "none", color: "#334155"}} /></label>
               <label style={{...label, flex: 1}}>Purpose *
                 <select value={purpose} onChange={(e) => setPurpose(e.target.value)} style={input}>
                   <option value="Manual Adjustment">Manual Adjustment</option>
@@ -232,7 +233,7 @@ export default function WarehouseOutward() {
             <div style={{ padding: 15, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 10 }}>
               <h4 style={{ margin: 0, color: "#334155" }}>Traceability Details</h4>
               <div style={{ display: "flex", gap: 15 }}>
-                <label style={{...label, flex: 1}}>Issued By * <input type="text" value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} style={input} required placeholder="Name of person handing over" /></label>
+                <label style={{...label, flex: 1}}>Issued By * <input type="text" value={issuedBy} disabled style={{...input, background: "#f1f5f9", cursor: "not-allowed", pointerEvents: "none", color: "#334155"}} placeholder="Name of person handing over" /></label>
                 {/* 🟢 Searchable Refiller Dropdown */}
                 <label style={{...label, flex: 1}}>
                   Issued To (Refiller) *
@@ -323,7 +324,7 @@ export default function WarehouseOutward() {
               </datalist>
             </div>
 
-            <label style={label}>General Remarks <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={input} rows="2" /></label>
+            <label style={label}>General Remarks * <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={input} rows="2" required /></label>
 
             <button type="submit" disabled={loading} style={btnDanger}>{loading ? "Processing..." : "📤 Deduct Stock"}</button>
           </form>

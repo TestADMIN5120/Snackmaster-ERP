@@ -1,6 +1,14 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
 import { db } from "../../firebaseClient";
+
+const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5001/api";
+const BACKEND_BASE = API_URL.replace("/api", "");
 
 export default function SuperAdminRefillers() {
   const [refillers, setRefillers] = useState([]);
@@ -8,7 +16,7 @@ export default function SuperAdminRefillers() {
   const [search, setSearch] = useState("");
   const [filterOrg, setFilterOrg] = useState("");
   const [loading, setLoading] = useState(true);
-  const [viewRefiller, setViewRefiller] = useState(null);
+  const [viewingUser, setViewingUser] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -25,38 +33,46 @@ export default function SuperAdminRefillers() {
       setRefillers(refillerSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setOrgs(orgSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (err) {
-      console.error("❌ Failed to load refiller data", err);
+      console.error("Failed to load refiller data", err);
     } finally {
       setLoading(false);
     }
   }
 
-  const orgName = (orgId) => orgs.find((o) => o.id === orgId)?.name || "Unassigned/Deleted";
+  function getOrgName(orgId) {
+    return orgs.find(o => o.id === orgId)?.name || "Unknown";
+  }
+
+  function getDocUrl(url) {
+    if (!url) return null;
+    return url.startsWith("http") ? url : `${BACKEND_BASE}${url}`;
+  }
 
   const visibleRefillers = useMemo(() => {
     return refillers.filter((r) => {
-      const org = orgName(r.orgId);
+      if (r.deleted) return false;
+      const orgName = getOrgName(r.orgId);
       const matchesSearch =
         (r.displayName || "").toLowerCase().includes(search.toLowerCase()) ||
         (r.email || "").toLowerCase().includes(search.toLowerCase()) ||
-        org.toLowerCase().includes(search.toLowerCase());
+        (r.phone || "").toLowerCase().includes(search.toLowerCase()) ||
+        orgName.toLowerCase().includes(search.toLowerCase());
       const matchesOrgFilter = !filterOrg || r.orgId === filterOrg;
       return matchesSearch && matchesOrgFilter;
     });
   }, [refillers, search, filterOrg, orgs]);
 
-  if (loading) return <div style={{ padding: 24 }}>Loading refillers…</div>;
+  if (loading) return <div style={{ padding: 24 }}>Loading refillers...</div>;
 
   return (
     <div style={{ padding: 24 }}>
       <div style={header}>
-        <h1>Refillers</h1>
-        <div style={{ fontSize: 14, color: "#64748b" }}>Total: {visibleRefillers.length}</div>
+        <h1>All Refillers</h1>
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center" }}>
         <input
-          placeholder="Search by name, email or org..."
+          placeholder="Search by name, email, phone or org..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={searchInput}
@@ -64,21 +80,22 @@ export default function SuperAdminRefillers() {
 
         <select value={filterOrg} onChange={(e) => setFilterOrg(e.target.value)} style={selectFilter}>
           <option value="">All Organisations</option>
-          {orgs.filter((o) => !o.deleted).map((o) => (
-            <option key={o.id} value={o.id}>{o.name}</option>
-          ))}
+          {orgs.filter(o => !o.deleted).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
+
+        <span style={{ color: "#64748b", fontSize: 13 }}>{visibleRefillers.length} refiller(s)</span>
       </div>
 
       <div style={tableContainer}>
         <table style={table}>
           <thead>
             <tr>
-              <th style={{ ...th, width: "22%" }}>Refiller Details</th>
-              <th style={{ ...th, width: "18%" }}>Organisation</th>
-              <th style={{ ...th, width: "15%" }}>Phone</th>
-              <th style={{ ...th, width: "15%" }}>Status</th>
-              <th style={{ ...th, width: "15%" }}>Action</th>
+              <th style={{ ...th, width: "22%" }}>Refiller</th>
+              <th style={{ ...th, width: "20%" }}>Organisation</th>
+              <th style={{ ...th, width: "14%" }}>Phone</th>
+              <th style={{ ...th, width: "14%" }}>Primary Contact</th>
+              <th style={{ ...th, width: "10%" }}>Status</th>
+              <th style={{ ...th, width: "20%" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -89,17 +106,19 @@ export default function SuperAdminRefillers() {
                   <div style={{ fontSize: 13, color: "#666" }}>{r.email}</div>
                 </td>
                 <td style={td}>
-                  <div style={{ fontWeight: 600 }}>{orgName(r.orgId)}</div>
-                  <div style={{ fontSize: 11, color: "#999", fontFamily: "monospace" }}>{r.orgId}</div>
+                  <div style={{ fontWeight: 600 }}>{getOrgName(r.orgId)}</div>
                 </td>
-                <td style={td}>{r.phone || "—"}</td>
+                <td style={td}>{r.phone || "-"}</td>
+                <td style={td}>{r.primaryContact || "-"}</td>
                 <td style={td}>
-                  <span style={statusBadge(r.deleted ? "deleted" : r.status)}>
-                    {r.deleted ? "deleted" : (r.status || "active")}
+                  <span style={statusBadge(r.status)}>
+                    {r.status || "active"}
                   </span>
                 </td>
                 <td style={td}>
-                  <button onClick={() => setViewRefiller(r)} style={btnView}>View</button>
+                  <button style={btnView} onClick={() => setViewingUser(r)}>
+                    View Details
+                  </button>
                 </td>
               </tr>
             ))}
@@ -112,29 +131,51 @@ export default function SuperAdminRefillers() {
         )}
       </div>
 
-      {/* VIEW REFILLER MODAL */}
-      {viewRefiller && (
-        <div style={backdrop} onClick={() => setViewRefiller(null)}>
-          <div style={viewModal} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0 }}>Refiller Details</h2>
-            <div style={viewRow}><b>Name:</b> {viewRefiller.displayName || "—"}</div>
-            <div style={viewRow}><b>Email:</b> {viewRefiller.email || "—"}</div>
-            <div style={viewRow}><b>Organisation:</b> {orgName(viewRefiller.orgId)}</div>
-            <div style={viewRow}><b>Status:</b> {viewRefiller.deleted ? "deleted" : (viewRefiller.status || "active")}</div>
-            <div style={viewRow}><b>Address:</b> {viewRefiller.address || "—"}</div>
-            <div style={viewRow}><b>Phone Number:</b> {viewRefiller.phone || "—"}</div>
-            <div style={viewRow}><b>Primary Contact:</b> {viewRefiller.primaryContact || "—"}</div>
-            <div style={viewRow}><b>Secondary Contact:</b> {viewRefiller.secondaryContact || "—"}</div>
-            <div style={viewRow}>
-              <b>Address / Identity Proof:</b>{" "}
-              {viewRefiller.proofDocUrl ? (
-                <a href={viewRefiller.proofDocUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#1e88e5" }}>
-                  📎 View document
-                </a>
-              ) : "—"}
+      {/* VIEW DETAILS MODAL */}
+      {viewingUser && (
+        <div style={modalOverlay}>
+          <div style={modalBox}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h2 style={{ margin: 0 }}>Refiller Details</h2>
+              <button style={btnClose} onClick={() => setViewingUser(null)}>Close</button>
             </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
-              <button onClick={() => setViewRefiller(null)} style={btnSecondary}>Close</button>
+
+            <div style={detailSection}>
+              <div style={detailRow}><span style={detailLabel}>Full Name</span><span style={detailValue}>{viewingUser.displayName || "-"}</span></div>
+              <div style={detailRow}><span style={detailLabel}>Email / Login</span><span style={detailValue}>{viewingUser.email || "-"}</span></div>
+              <div style={detailRow}><span style={detailLabel}>Organisation</span><span style={detailValue}>{getOrgName(viewingUser.orgId)}</span></div>
+              <div style={detailRow}><span style={detailLabel}>Status</span><span style={detailValue}><span style={statusBadge(viewingUser.status)}>{viewingUser.status || "active"}</span></span></div>
+            </div>
+
+            <div style={sectionDivider} />
+
+            <div style={detailSection}>
+              <div style={detailRow}><span style={detailLabel}>Phone Number</span><span style={detailValue}>{viewingUser.phone || "-"}</span></div>
+              <div style={detailRow}><span style={detailLabel}>Primary Contact</span><span style={detailValue}>{viewingUser.primaryContact || "-"}</span></div>
+              <div style={detailRow}><span style={detailLabel}>Secondary Contact</span><span style={detailValue}>{viewingUser.secondaryContact || "-"}</span></div>
+              <div style={detailRow}><span style={detailLabel}>Address</span><span style={detailValue}>{viewingUser.address || "-"}</span></div>
+            </div>
+
+            <div style={sectionDivider} />
+
+            <div style={detailSection}>
+              <div style={detailRow}><span style={detailLabel}>ID Type</span><span style={detailValue}>{viewingUser.idType || "-"}</span></div>
+              <div style={detailRow}><span style={detailLabel}>ID Number</span><span style={detailValue}>{viewingUser.idNumber || "-"}</span></div>
+              <div style={detailRow}>
+                <span style={detailLabel}>Identity Proof</span>
+                <span style={detailValue}>
+                  {viewingUser.identityProofUrl ? (
+                    <a
+                      href={getDocUrl(viewingUser.identityProofUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#1e88e5", textDecoration: "underline" }}
+                    >
+                      View Document
+                    </a>
+                  ) : "Not uploaded"}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -148,21 +189,26 @@ const header = { display: "flex", justifyContent: "space-between", alignItems: "
 const tableContainer = { background: "#fff", borderRadius: 12, boxShadow: "0 2px 10px rgba(0,0,0,0.05)", overflow: "hidden" };
 const table = { width: "100%", borderCollapse: "collapse", tableLayout: "fixed" };
 const th = { textAlign: "left", padding: "16px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#64748b", fontSize: 13, textTransform: "uppercase" };
-const td = { padding: "16px", verticalAlign: "middle" };
+const td = { padding: "16px", verticalAlign: "middle", fontSize: 14 };
 const tr = { borderBottom: "1px solid #f1f5f9" };
 const searchInput = { padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", width: "300px", fontSize: 14 };
 const selectFilter = { padding: "10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontSize: 14 };
 const emptyBox = { padding: "60px", textAlign: "center", color: "#94a3b8", fontSize: 16 };
 
-const btnView = { height: "34px", padding: "0 16px", background: "#1e88e5", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
-const btnSecondary = { padding: "10px 16px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const btnView = { padding: "8px 14px", background: "#e3f2fd", color: "#1565c0", border: "1px solid #90caf9", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
+const btnClose = { padding: "8px 16px", background: "#e2e8f0", color: "#475569", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold" };
 
-const backdrop = { position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(15, 23, 42, 0.6)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 9999 };
-const viewModal = { background: "#fff", padding: 24, borderRadius: 12, width: "420px", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" };
-const viewRow = { padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: 14 };
+const modalOverlay = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.6)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 };
+const modalBox = { background: "#fff", padding: 24, borderRadius: 12, width: 520, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" };
+
+const sectionDivider = { borderTop: "1px solid #e2e8f0", margin: "12px 0" };
+const detailSection = { display: "flex", flexDirection: "column", gap: 8 };
+const detailRow = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "6px 0" };
+const detailLabel = { fontSize: 13, fontWeight: "bold", color: "#64748b", minWidth: 140 };
+const detailValue = { fontSize: 14, color: "#1e293b", textAlign: "right", flex: 1, wordBreak: "break-word" };
 
 const statusBadge = (status) => ({
   padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", textTransform: "uppercase",
-  background: status === "deleted" ? "#ffebee" : (status === "disabled" ? "#fff3e0" : "#e8f5e9"),
-  color: status === "deleted" ? "#c62828" : (status === "disabled" ? "#ef6c00" : "#2e7d32")
+  background: status === "disabled" ? "#fff3e0" : "#e8f5e9",
+  color: status === "disabled" ? "#ef6c00" : "#2e7d32"
 });

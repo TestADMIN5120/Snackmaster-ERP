@@ -27,6 +27,7 @@ export default function MachineTable({
         <tr>
           <th style={th}>ID</th>
           <th style={th}>Name</th>
+          <th style={th}>Type</th>
           <th style={th}>Location</th>
           <th style={th}>Capacity</th>
           <th style={th}>Status</th>
@@ -40,6 +41,7 @@ export default function MachineTable({
           <tr key={m.id} style={{ borderBottom: "1px solid #eee" }}>
             <td style={td}>{m.id}</td>
             <td style={td}>{m.name || "-"}</td>
+            <td style={td}>{m.machineType || "-"}</td>
             <td style={td}>{m.location || "-"}</td>
             <td style={td}>{m.capacity || "-"}</td>
 

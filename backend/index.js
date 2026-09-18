@@ -32,18 +32,6 @@ app.use(cors());
 app.use(bodyParser.json());
 
 /* ──────────────────────────────────────────────
-   🖼️ PRODUCT IMAGES — stored in <repo>/product_images,
-   each file exposed at /product_images/<filename>
-────────────────────────────────────────────── */
-const PRODUCT_IMAGES_DIR = path.join(__dirname, "..", "product_images");
-fs.mkdirSync(PRODUCT_IMAGES_DIR, { recursive: true });
-
-// Filenames are timestamped (immutable), so long browser caching is safe.
-app.use("/product_images", express.static(PRODUCT_IMAGES_DIR, { maxAge: "365d", immutable: true }));
-
-const IMAGE_TYPES = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
-
-/* ──────────────────────────────────────────────
    📄 REFILLER DOCUMENTS — stored in <repo>/refiller_documents,
    each file exposed at /refiller_documents/<filename>
 ────────────────────────────────────────────── */
@@ -63,15 +51,6 @@ const docUpload = multer({
   fileFilter: (req, file, cb) => {
     if (DOC_TYPES[file.mimetype]) cb(null, true);
     else cb(new Error("Only JPG, PNG, WEBP or PDF files are allowed."));
-  }
-});
-
-const imageUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
-  fileFilter: (req, file, cb) => {
-    if (IMAGE_TYPES[file.mimetype]) cb(null, true);
-    else cb(new Error("Only JPG, PNG or WEBP images are allowed."));
   }
 });
 
@@ -96,76 +75,6 @@ async function requireAdmin(req, res, next) {
     res.status(401).json({ error: "Invalid or expired auth token" });
   }
 }
-
-// Loads the master product, enforcing org ownership (super_admin bypasses).
-async function loadOwnedProduct(req, res) {
-  const productId = req.params.productId || "";
-  if (!/^[A-Za-z0-9_-]+$/.test(productId)) {
-    res.status(400).json({ error: "Invalid product id" });
-    return null;
-  }
-  const snap = await db.collection("master_products").doc(productId).get();
-  if (!snap.exists) {
-    res.status(404).json({ error: "Product not found" });
-    return null;
-  }
-  const product = snap.data();
-  if (req.caller.role !== "super_admin" && product.orgId !== req.caller.orgId) {
-    res.status(403).json({ error: "Product belongs to another organisation" });
-    return null;
-  }
-  return { id: productId, ref: snap.ref, ...product };
-}
-
-const removeProductImageFiles = (productId) =>
-  fs.readdirSync(PRODUCT_IMAGES_DIR)
-    .filter((f) => f.startsWith(`${productId}_`))
-    .forEach((f) => fs.unlinkSync(path.join(PRODUCT_IMAGES_DIR, f)));
-
-// ADD / REPLACE image (multipart field: "image")
-app.post("/api/product-images/:productId", requireAdmin, (req, res) => {
-  imageUpload.single("image")(req, res, async (err) => {
-    if (err) return res.status(400).json({ error: err.message });
-    if (!req.file) return res.status(400).json({ error: "No image file received" });
-
-    try {
-      const product = await loadOwnedProduct(req, res);
-      if (!product) return;
-
-      removeProductImageFiles(product.id); // replace = drop the old file
-      const filename = `${product.id}_${Date.now()}${IMAGE_TYPES[req.file.mimetype]}`;
-      fs.writeFileSync(path.join(PRODUCT_IMAGES_DIR, filename), req.file.buffer);
-
-      const imageUrl = `/product_images/${filename}`;
-      await product.ref.update({
-        imageUrl,
-        imageUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      res.json({ ok: true, imageUrl });
-    } catch (error) {
-      console.error("Product image upload error:", error);
-      res.status(500).json({ error: "Failed to save image" });
-    }
-  });
-});
-
-// DELETE image
-app.delete("/api/product-images/:productId", requireAdmin, async (req, res) => {
-  try {
-    const product = await loadOwnedProduct(req, res);
-    if (!product) return;
-
-    removeProductImageFiles(product.id);
-    await product.ref.update({
-      imageUrl: admin.firestore.FieldValue.delete(),
-      imageUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    res.json({ ok: true });
-  } catch (error) {
-    console.error("Product image delete error:", error);
-    res.status(500).json({ error: "Failed to delete image" });
-  }
-});
 
 /* ──────────────────────────────────────────────
    📄 REFILLER DOCUMENT UPLOAD / DELETE

@@ -32,6 +32,14 @@ service firebase.storage {
       allow read, write: if isStaff();
     }
 
+    // ── Product images ────────────────────────────────────────────────
+    // Any authenticated user can view; only staff can upload/delete (max 2 MB).
+    match /product_images/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isStaff()
+        && (request.resource == null || request.resource.size <= 2 * 1024 * 1024);
+    }
+
     // ── Everything else: denied ─────────────────────────────────────────
     match /{allPaths=**} {
       allow read, write: if false;

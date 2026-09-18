@@ -1,12 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
-import axios from "axios";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db, auth } from "../../firebaseClient";
+import { collection, getDocs, query, where, doc, updateDoc, deleteField, serverTimestamp } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { db, storage } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
-
-const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5001/api";
-// Static images are served from the backend origin, without the /api suffix.
-const IMAGE_ORIGIN = API_URL.replace(/\/api\/?$/, "");
 
 export default function AdminProductImages() {
   const { orgId } = useAdmin();
@@ -60,17 +56,32 @@ export default function AdminProductImages() {
     setBusyId(product.id);
     setMessage(null);
     try {
-      const idToken = await auth.currentUser.getIdToken();
-      const formData = new FormData();
-      formData.append("image", file);
-      const res = await axios.post(`${API_URL}/product-images/${product.id}`, formData, {
-        headers: { Authorization: `Bearer ${idToken}` }
+      // If replacing, delete the old file from Storage (only if it's a Firebase URL)
+      if (product.imageUrl && product.imageUrl.includes("firebasestorage.googleapis.com")) {
+        try {
+          const oldRef = ref(storage, product.imageUrl);
+          await deleteObject(oldRef);
+        } catch (delErr) {
+          console.warn("Could not delete old image (may already be gone):", delErr.message);
+        }
+      }
+
+      const ext = file.name.substring(file.name.lastIndexOf(".")) || ".jpg";
+      const filePath = `product_images/${product.id}_${Date.now()}${ext}`;
+      const fileRef = ref(storage, filePath);
+      await uploadBytes(fileRef, file);
+      const downloadUrl = await getDownloadURL(fileRef);
+
+      await updateDoc(doc(db, "master_products", product.id), {
+        imageUrl: downloadUrl,
+        imageUpdatedAt: serverTimestamp()
       });
-      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, imageUrl: res.data.imageUrl } : p));
+
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, imageUrl: downloadUrl } : p));
       setMessage({ type: "ok", text: `Image saved for ${product.name || product.id}.` });
     } catch (err) {
       console.error(err);
-      setMessage({ type: "error", text: err.response?.data?.error || "Upload failed. Is the backend running?" });
+      setMessage({ type: "error", text: err.message || "Upload failed." });
     } finally {
       setBusyId(null);
     }
@@ -81,15 +92,21 @@ export default function AdminProductImages() {
     setBusyId(product.id);
     setMessage(null);
     try {
-      const idToken = await auth.currentUser.getIdToken();
-      await axios.delete(`${API_URL}/product-images/${product.id}`, {
-        headers: { Authorization: `Bearer ${idToken}` }
+      if (product.imageUrl && product.imageUrl.includes("firebasestorage.googleapis.com")) {
+        const fileRef = ref(storage, product.imageUrl);
+        await deleteObject(fileRef);
+      }
+
+      await updateDoc(doc(db, "master_products", product.id), {
+        imageUrl: deleteField(),
+        imageUpdatedAt: serverTimestamp()
       });
+
       setProducts(prev => prev.map(p => p.id === product.id ? { ...p, imageUrl: null } : p));
       setMessage({ type: "ok", text: `Image deleted for ${product.name || product.id}.` });
     } catch (err) {
       console.error(err);
-      setMessage({ type: "error", text: err.response?.data?.error || "Delete failed. Is the backend running?" });
+      setMessage({ type: "error", text: err.message || "Delete failed." });
     } finally {
       setBusyId(null);
     }
@@ -110,7 +127,7 @@ export default function AdminProductImages() {
       <div style={headerBar}>
         <h1 style={{ margin: 0, color: "#fff", fontSize: 21, letterSpacing: "-0.5px" }}>🖼️ Product Images</h1>
         <p style={{ color: "rgba(255,255,255,0.88)", margin: "3px 0 0 0", fontSize: 13 }}>
-          Upload one image per master product. Each image gets its own URL from the backend&apos;s /product_images folder.
+          Upload one image per master product. Images are stored in Firebase Storage.
         </p>
       </div>
 
@@ -169,7 +186,7 @@ export default function AdminProductImages() {
               </thead>
               <tbody>
                 {filtered.map(p => {
-                  const fullUrl = p.imageUrl ? `${IMAGE_ORIGIN}${p.imageUrl}` : null;
+                  const fullUrl = p.imageUrl?.startsWith("http") ? p.imageUrl : null;
                   const busy = busyId === p.id;
                   return (
                     <tr key={p.id} style={{ borderBottom: "1px solid #f1f5f9" }}>

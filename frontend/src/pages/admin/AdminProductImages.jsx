@@ -120,7 +120,8 @@ export default function AdminProductImages() {
         (p.brand || "").toLowerCase().includes(term))
     : products;
 
-  const withImage = products.filter(p => p.imageUrl).length;
+  const isValidUrl = (url) => url && url.startsWith("http");
+  const withImage = products.filter(p => isValidUrl(p.imageUrl)).length;
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -186,17 +187,18 @@ export default function AdminProductImages() {
               </thead>
               <tbody>
                 {filtered.map(p => {
-                  const fullUrl = p.imageUrl || null;
+                  const hasValidImage = isValidUrl(p.imageUrl);
+                  const hasOldBrokenUrl = p.imageUrl && !hasValidImage;
                   const busy = busyId === p.id;
                   return (
                     <tr key={p.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
                       <td style={td}>
-                        {fullUrl ? (
-                          <a href={fullUrl} target="_blank" rel="noreferrer" title="Open full image">
-                            <img src={fullUrl} alt={p.name} style={thumb} />
+                        {hasValidImage ? (
+                          <a href={p.imageUrl} target="_blank" rel="noreferrer" title="Open full image">
+                            <img src={p.imageUrl} alt={p.name} style={thumb} />
                           </a>
                         ) : (
-                          <div style={{ ...thumb, display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", color: "#94a3b8", fontSize: 18 }}>—</div>
+                          <div style={{ ...thumb, display: "flex", alignItems: "center", justifyContent: "center", background: hasOldBrokenUrl ? "#fef2f2" : "#f1f5f9", color: hasOldBrokenUrl ? "#ef4444" : "#94a3b8", fontSize: 18 }}>{hasOldBrokenUrl ? "!" : "—"}</div>
                         )}
                       </td>
                       <td style={{ ...td, fontFamily: "monospace", color: "#64748b" }}>{p.sku || "-"}</td>
@@ -206,12 +208,12 @@ export default function AdminProductImages() {
                       </td>
                       <td style={td}>{p.brand || "-"}</td>
                       <td style={{ ...td, fontSize: 12, fontFamily: "monospace", color: "#64748b", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {fullUrl ? <a href={fullUrl} target="_blank" rel="noreferrer" style={{ color: "#357683" }}>{p.imageUrl}</a> : <span style={{ color: "#cbd5e1" }}>no image</span>}
+                        {hasValidImage ? <a href={p.imageUrl} target="_blank" rel="noreferrer" style={{ color: "#357683" }}>{p.imageUrl}</a> : hasOldBrokenUrl ? <span style={{ color: "#ef4444" }}>old link — re-upload needed</span> : <span style={{ color: "#cbd5e1" }}>no image</span>}
                       </td>
                       <td style={td}>
                         <div style={{ display: "flex", gap: 8 }}>
                           <button onClick={() => pickFileFor(p)} disabled={busy} style={btnUpload}>
-                            {busy ? "⏳..." : p.imageUrl ? "🔄 Replace" : "📤 Upload"}
+                            {busy ? "⏳..." : hasValidImage ? "🔄 Replace" : "📤 Upload"}
                           </button>
                           {p.imageUrl && (
                             <button onClick={() => handleDelete(p)} disabled={busy} style={btnDelete} title="Delete image">🗑️</button>

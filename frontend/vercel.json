@@ -1,4 +1,8 @@
 {
+  "installCommand": "npm install --include=dev",
+  "buildCommand": "npx vite build --mode production",
+  "outputDirectory": "dist",
+  "framework": null,
   "rewrites": [
     {
       "source": "/(.*)",

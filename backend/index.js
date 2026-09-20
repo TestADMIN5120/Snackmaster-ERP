@@ -3,8 +3,6 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const admin = require("firebase-admin");
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
 
 // 🟢 DYNAMIC FIREBASE SECRETS (Cloud + Local Support)
 let serviceAccount;
@@ -21,25 +19,39 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   }
 }
 
+const STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET || "snackmaster-refill-134fa.firebasestorage.app";
+
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
+  storageBucket: STORAGE_BUCKET
 });
 
 const db = admin.firestore();
+const bucket = admin.storage().bucket();
 const app = express();
 
 app.use(cors());
 app.use(bodyParser.json());
 
 /* ──────────────────────────────────────────────
-   📄 REFILLER DOCUMENTS — stored in <repo>/refiller_documents,
-   each file exposed at /refiller_documents/<filename>
+   🖼️ PRODUCT IMAGES — stored in Firebase Storage
+   at product_images/<filename>, public URL returned
 ────────────────────────────────────────────── */
-const REFILLER_DOCS_DIR = path.join(__dirname, "..", "refiller_documents");
-fs.mkdirSync(REFILLER_DOCS_DIR, { recursive: true });
+const IMAGE_TYPES = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
 
-app.use("/refiller_documents", express.static(REFILLER_DOCS_DIR, { maxAge: "365d", immutable: true }));
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
+  fileFilter: (req, file, cb) => {
+    if (IMAGE_TYPES[file.mimetype]) cb(null, true);
+    else cb(new Error("Only JPG, PNG or WEBP images are allowed."));
+  }
+});
 
+/* ──────────────────────────────────────────────
+   📄 REFILLER DOCUMENTS — stored in Firebase Storage
+   at refiller_documents/<filename>, public URL returned
+────────────────────────────────────────────── */
 const DOC_TYPES = {
   "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
   "application/pdf": ".pdf"
@@ -76,13 +88,87 @@ async function requireAdmin(req, res, next) {
   }
 }
 
+// Loads the master product, enforcing org ownership (super_admin bypasses).
+async function loadOwnedProduct(req, res) {
+  const productId = req.params.productId || "";
+  if (!/^[A-Za-z0-9_-]+$/.test(productId)) {
+    res.status(400).json({ error: "Invalid product id" });
+    return null;
+  }
+  const snap = await db.collection("master_products").doc(productId).get();
+  if (!snap.exists) {
+    res.status(404).json({ error: "Product not found" });
+    return null;
+  }
+  const product = snap.data();
+  if (req.caller.role !== "super_admin" && product.orgId !== req.caller.orgId) {
+    res.status(403).json({ error: "Product belongs to another organisation" });
+    return null;
+  }
+  return { id: productId, ref: snap.ref, ...product };
+}
+
+async function removeProductImageFromStorage(productId) {
+  const [files] = await bucket.getFiles({ prefix: `product_images/${productId}_` });
+  await Promise.all(files.map((f) => f.delete()));
+}
+
+// ADD / REPLACE image (multipart field: "image")
+app.post("/api/product-images/:productId", requireAdmin, (req, res) => {
+  imageUpload.single("image")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "No image file received" });
+
+    try {
+      const product = await loadOwnedProduct(req, res);
+      if (!product) return;
+
+      await removeProductImageFromStorage(product.id); // replace = drop the old file
+      const filename = `product_images/${product.id}_${Date.now()}${IMAGE_TYPES[req.file.mimetype]}`;
+      const file = bucket.file(filename);
+      await file.save(req.file.buffer, {
+        metadata: { contentType: req.file.mimetype }
+      });
+      await file.makePublic();
+
+      const imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+      await product.ref.update({
+        imageUrl,
+        imageUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      res.json({ ok: true, imageUrl });
+    } catch (error) {
+      console.error("Product image upload error:", error);
+      res.status(500).json({ error: "Failed to save image" });
+    }
+  });
+});
+
+// DELETE image
+app.delete("/api/product-images/:productId", requireAdmin, async (req, res) => {
+  try {
+    const product = await loadOwnedProduct(req, res);
+    if (!product) return;
+
+    await removeProductImageFromStorage(product.id);
+    await product.ref.update({
+      imageUrl: admin.firestore.FieldValue.delete(),
+      imageUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Product image delete error:", error);
+    res.status(500).json({ error: "Failed to delete image" });
+  }
+});
+
 /* ──────────────────────────────────────────────
    📄 REFILLER DOCUMENT UPLOAD / DELETE
 ────────────────────────────────────────────── */
-const removeRefillerDocFiles = (userId) =>
-  fs.readdirSync(REFILLER_DOCS_DIR)
-    .filter((f) => f.startsWith(`${userId}_`))
-    .forEach((f) => fs.unlinkSync(path.join(REFILLER_DOCS_DIR, f)));
+async function removeRefillerDocFromStorage(userId) {
+  const [files] = await bucket.getFiles({ prefix: `refiller_documents/${userId}_` });
+  await Promise.all(files.map((f) => f.delete()));
+}
 
 // ADD / REPLACE identity proof document (multipart field: "document")
 app.post("/api/refiller-documents/:userId", requireAdmin, (req, res) => {
@@ -101,11 +187,15 @@ app.post("/api/refiller-documents/:userId", requireAdmin, (req, res) => {
         return res.status(404).json({ error: "User not found" });
       }
 
-      removeRefillerDocFiles(userId); // replace = drop old file
-      const filename = `${userId}_${Date.now()}${DOC_TYPES[req.file.mimetype]}`;
-      fs.writeFileSync(path.join(REFILLER_DOCS_DIR, filename), req.file.buffer);
+      await removeRefillerDocFromStorage(userId); // replace = drop old file
+      const filename = `refiller_documents/${userId}_${Date.now()}${DOC_TYPES[req.file.mimetype]}`;
+      const file = bucket.file(filename);
+      await file.save(req.file.buffer, {
+        metadata: { contentType: req.file.mimetype }
+      });
+      await file.makePublic();
 
-      const identityProofUrl = `/refiller_documents/${filename}`;
+      const identityProofUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
       await db.collection("users").doc(userId).update({ identityProofUrl });
 
       res.json({ ok: true, identityProofUrl });
@@ -129,7 +219,7 @@ app.delete("/api/refiller-documents/:userId", requireAdmin, async (req, res) => 
       return res.status(404).json({ error: "User not found" });
     }
 
-    removeRefillerDocFiles(userId);
+    await removeRefillerDocFromStorage(userId);
     await db.collection("users").doc(userId).update({
       identityProofUrl: admin.firestore.FieldValue.delete()
     });

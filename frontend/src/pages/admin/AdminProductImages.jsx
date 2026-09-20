@@ -186,7 +186,7 @@ export default function AdminProductImages() {
               </thead>
               <tbody>
                 {filtered.map(p => {
-                  const fullUrl = p.imageUrl?.startsWith("http") ? p.imageUrl : null;
+                  const fullUrl = p.imageUrl || null;
                   const busy = busyId === p.id;
                   return (
                     <tr key={p.id} style={{ borderBottom: "1px solid #f1f5f9" }}>

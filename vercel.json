@@ -1,7 +1,7 @@
 {
   "buildCommand": "cd frontend && npm install --include=dev && npx vite build --mode production",
   "outputDirectory": "frontend/dist",
-  "installCommand": "echo skip",
+  "installCommand": "cd frontend && npm install --include=dev",
   "framework": null,
   "rewrites": [
     {

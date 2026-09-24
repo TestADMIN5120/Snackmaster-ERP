@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteField, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { db, storage } from "../../firebaseClient";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { db } from "../../firebaseClient";
 import { useAdmin } from "../../contexts/AdminContext";
+
+const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5001/api";
 
 export default function AdminProductImages() {
   const { orgId } = useAdmin();
@@ -57,28 +59,19 @@ export default function AdminProductImages() {
     setBusyId(product.id);
     setMessage(null);
     try {
-      // If replacing, delete the old file from Storage (only if it's a Firebase URL)
-      if (product.imageUrl && product.imageUrl.includes("firebasestorage.googleapis.com")) {
-        try {
-          const oldRef = ref(storage, product.imageUrl);
-          await deleteObject(oldRef);
-        } catch (delErr) {
-          console.warn("Could not delete old image (may already be gone):", delErr.message);
-        }
-      }
+      const token = await getAuth().currentUser.getIdToken();
+      const formData = new FormData();
+      formData.append("image", file);
 
-      const ext = file.name.substring(file.name.lastIndexOf(".")) || ".jpg";
-      const filePath = `product_images/${product.id}_${Date.now()}${ext}`;
-      const fileRef = ref(storage, filePath);
-      await uploadBytes(fileRef, file);
-      const downloadUrl = await getDownloadURL(fileRef);
-
-      await updateDoc(doc(db, "master_products", product.id), {
-        imageUrl: downloadUrl,
-        imageUpdatedAt: serverTimestamp()
+      const res = await fetch(`${API_URL}/product-images/${product.id}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
 
-      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, imageUrl: downloadUrl } : p));
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, imageUrl: data.imageUrl } : p));
       setMessage({ type: "ok", text: `Image saved for ${product.name || product.id}.` });
     } catch (err) {
       console.error(err);
@@ -93,15 +86,13 @@ export default function AdminProductImages() {
     setBusyId(product.id);
     setMessage(null);
     try {
-      if (product.imageUrl && product.imageUrl.includes("firebasestorage.googleapis.com")) {
-        const fileRef = ref(storage, product.imageUrl);
-        await deleteObject(fileRef);
-      }
-
-      await updateDoc(doc(db, "master_products", product.id), {
-        imageUrl: deleteField(),
-        imageUpdatedAt: serverTimestamp()
+      const token = await getAuth().currentUser.getIdToken();
+      const res = await fetch(`${API_URL}/product-images/${product.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed");
 
       setProducts(prev => prev.map(p => p.id === product.id ? { ...p, imageUrl: null } : p));
       setMessage({ type: "ok", text: `Image deleted for ${product.name || product.id}.` });

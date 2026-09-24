@@ -3,31 +3,34 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const admin = require("firebase-admin");
 const multer = require("multer");
+const cloudinary = require("cloudinary").v2;
 
 // 🟢 DYNAMIC FIREBASE SECRETS (Cloud + Local Support)
 let serviceAccount;
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  // If deployed to Render, use the secure Environment Variable
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 } else {
-  // If running locally, use the JSON file
   try {
     serviceAccount = require("./serviceAccountKey.json");
   } catch (err) {
     console.error("❌ CRITICAL: No FIREBASE_SERVICE_ACCOUNT env var, and serviceAccountKey.json is missing.");
-    process.exit(1); // Stop the server from crashing wildly
+    process.exit(1);
   }
 }
 
-const STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET || "snackmaster-refill-a950e.firebasestorage.app";
-
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  storageBucket: STORAGE_BUCKET
 });
 
 const db = admin.firestore();
-const bucket = admin.storage().bucket();
+
+// 🟢 CLOUDINARY CONFIG
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
 const app = express();
 
 app.use(cors());
@@ -37,8 +40,33 @@ app.use(bodyParser.json());
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
 /* ──────────────────────────────────────────────
-   🖼️ PRODUCT IMAGES — stored in Firebase Storage
-   at product_images/<filename>, public URL returned
+   CLOUDINARY UPLOAD HELPER
+────────────────────────────────────────────── */
+function uploadToCloudinary(buffer, folder, publicId, resourceType = "image") {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        public_id: publicId,
+        resource_type: resourceType,
+        overwrite: true,
+      },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
+    );
+    stream.end(buffer);
+  });
+}
+
+function deleteFromCloudinary(folder, publicId, resourceType = "image") {
+  const fullId = `${folder}/${publicId}`;
+  return cloudinary.uploader.destroy(fullId, { resource_type: resourceType }).catch(() => {});
+}
+
+/* ──────────────────────────────────────────────
+   🖼️ PRODUCT IMAGES — stored in Cloudinary
 ────────────────────────────────────────────── */
 const IMAGE_TYPES = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
 
@@ -52,8 +80,7 @@ const imageUpload = multer({
 });
 
 /* ──────────────────────────────────────────────
-   📄 REFILLER DOCUMENTS — stored in Firebase Storage
-   at refiller_documents/<filename>, public URL returned
+   📄 REFILLER DOCUMENTS — stored in Cloudinary
 ────────────────────────────────────────────── */
 const DOC_TYPES = {
   "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
@@ -111,12 +138,7 @@ async function loadOwnedProduct(req, res) {
   return { id: productId, ref: snap.ref, ...product };
 }
 
-async function removeProductImageFromStorage(productId) {
-  const [files] = await bucket.getFiles({ prefix: `product_images/${productId}_` });
-  await Promise.all(files.map((f) => f.delete()));
-}
-
-// ADD / REPLACE image (multipart field: "image")
+// ADD / REPLACE product image
 app.post("/api/product-images/:productId", requireAdmin, (req, res) => {
   imageUpload.single("image")(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -126,17 +148,18 @@ app.post("/api/product-images/:productId", requireAdmin, (req, res) => {
       const product = await loadOwnedProduct(req, res);
       if (!product) return;
 
-      await removeProductImageFromStorage(product.id); // replace = drop the old file
-      const filename = `product_images/${product.id}_${Date.now()}${IMAGE_TYPES[req.file.mimetype]}`;
-      const file = bucket.file(filename);
-      await file.save(req.file.buffer, {
-        metadata: { contentType: req.file.mimetype }
-      });
-      await file.makePublic();
+      const publicId = `${product.id}_${Date.now()}`;
+      const result = await uploadToCloudinary(req.file.buffer, "product_images", publicId);
+      const imageUrl = result.secure_url;
 
-      const imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+      // Delete old Cloudinary image if exists
+      if (product.cloudinaryPublicId) {
+        await deleteFromCloudinary("product_images", product.cloudinaryPublicId);
+      }
+
       await product.ref.update({
         imageUrl,
+        cloudinaryPublicId: publicId,
         imageUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       res.json({ ok: true, imageUrl });
@@ -147,15 +170,19 @@ app.post("/api/product-images/:productId", requireAdmin, (req, res) => {
   });
 });
 
-// DELETE image
+// DELETE product image
 app.delete("/api/product-images/:productId", requireAdmin, async (req, res) => {
   try {
     const product = await loadOwnedProduct(req, res);
     if (!product) return;
 
-    await removeProductImageFromStorage(product.id);
+    if (product.cloudinaryPublicId) {
+      await deleteFromCloudinary("product_images", product.cloudinaryPublicId);
+    }
+
     await product.ref.update({
       imageUrl: admin.firestore.FieldValue.delete(),
+      cloudinaryPublicId: admin.firestore.FieldValue.delete(),
       imageUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     res.json({ ok: true });
@@ -168,12 +195,8 @@ app.delete("/api/product-images/:productId", requireAdmin, async (req, res) => {
 /* ──────────────────────────────────────────────
    📄 REFILLER DOCUMENT UPLOAD / DELETE
 ────────────────────────────────────────────── */
-async function removeRefillerDocFromStorage(userId) {
-  const [files] = await bucket.getFiles({ prefix: `refiller_documents/${userId}_` });
-  await Promise.all(files.map((f) => f.delete()));
-}
 
-// ADD / REPLACE identity proof document (multipart field: "document")
+// ADD / REPLACE identity proof document
 app.post("/api/refiller-documents/:userId", requireAdmin, (req, res) => {
   docUpload.single("document")(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -190,16 +213,22 @@ app.post("/api/refiller-documents/:userId", requireAdmin, (req, res) => {
         return res.status(404).json({ error: "User not found" });
       }
 
-      await removeRefillerDocFromStorage(userId); // replace = drop old file
-      const filename = `refiller_documents/${userId}_${Date.now()}${DOC_TYPES[req.file.mimetype]}`;
-      const file = bucket.file(filename);
-      await file.save(req.file.buffer, {
-        metadata: { contentType: req.file.mimetype }
-      });
-      await file.makePublic();
+      const publicId = `${userId}_${Date.now()}`;
+      const resourceType = req.file.mimetype === "application/pdf" ? "raw" : "image";
+      const result = await uploadToCloudinary(req.file.buffer, "refiller_documents", publicId, resourceType);
+      const identityProofUrl = result.secure_url;
 
-      const identityProofUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
-      await db.collection("users").doc(userId).update({ identityProofUrl });
+      // Delete old if exists
+      const oldData = userSnap.data();
+      if (oldData.cloudinaryDocPublicId) {
+        await deleteFromCloudinary("refiller_documents", oldData.cloudinaryDocPublicId, oldData.cloudinaryDocResourceType || "image");
+      }
+
+      await db.collection("users").doc(userId).update({
+        identityProofUrl,
+        cloudinaryDocPublicId: publicId,
+        cloudinaryDocResourceType: resourceType,
+      });
 
       res.json({ ok: true, identityProofUrl });
     } catch (error) {
@@ -222,9 +251,15 @@ app.delete("/api/refiller-documents/:userId", requireAdmin, async (req, res) => 
       return res.status(404).json({ error: "User not found" });
     }
 
-    await removeRefillerDocFromStorage(userId);
+    const userData = userSnap.data();
+    if (userData.cloudinaryDocPublicId) {
+      await deleteFromCloudinary("refiller_documents", userData.cloudinaryDocPublicId, userData.cloudinaryDocResourceType || "image");
+    }
+
     await db.collection("users").doc(userId).update({
-      identityProofUrl: admin.firestore.FieldValue.delete()
+      identityProofUrl: admin.firestore.FieldValue.delete(),
+      cloudinaryDocPublicId: admin.firestore.FieldValue.delete(),
+      cloudinaryDocResourceType: admin.firestore.FieldValue.delete(),
     });
 
     res.json({ ok: true });
@@ -339,4 +374,4 @@ app.post("/api/admin-reset-password", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => console.log(`🚀 Backend live on port ${PORT}`));
+app.listen(PORT, () => console.log(`Backend live on port ${PORT}`));

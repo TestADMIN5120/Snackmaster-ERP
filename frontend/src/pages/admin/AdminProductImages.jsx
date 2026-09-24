@@ -12,6 +12,7 @@ export default function AdminProductImages() {
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState(null); // productId with an in-flight request
   const [message, setMessage] = useState(null); // { type: "ok" | "error", text }
+  const [preview, setPreview] = useState(null); // { url, name } for the lightbox
 
   const fileInputRef = useRef(null);
   const uploadTargetRef = useRef(null);
@@ -194,9 +195,14 @@ export default function AdminProductImages() {
                     <tr key={p.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
                       <td style={td}>
                         {hasValidImage ? (
-                          <a href={p.imageUrl} target="_blank" rel="noreferrer" title="Open full image">
+                          <button
+                            type="button"
+                            onClick={() => setPreview({ url: p.imageUrl, name: p.name || p.id })}
+                            title="View full image"
+                            style={{ padding: 0, border: "none", background: "none", cursor: "zoom-in" }}
+                          >
                             <img src={p.imageUrl} alt={p.name} style={thumb} />
-                          </a>
+                          </button>
                         ) : (
                           <div style={{ ...thumb, display: "flex", alignItems: "center", justifyContent: "center", background: hasOldBrokenUrl ? "#fef2f2" : "#f1f5f9", color: hasOldBrokenUrl ? "#ef4444" : "#94a3b8", fontSize: 18 }}>{hasOldBrokenUrl ? "!" : "—"}</div>
                         )}
@@ -208,7 +214,15 @@ export default function AdminProductImages() {
                       </td>
                       <td style={td}>{p.brand || "-"}</td>
                       <td style={{ ...td, fontSize: 12, fontFamily: "monospace", color: "#64748b", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {hasValidImage ? <a href={p.imageUrl} target="_blank" rel="noreferrer" style={{ color: "#357683" }}>{p.imageUrl}</a> : hasOldBrokenUrl ? <span style={{ color: "#ef4444" }}>old link — re-upload needed</span> : <span style={{ color: "#cbd5e1" }}>no image</span>}
+                        {hasValidImage ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreview({ url: p.imageUrl, name: p.name || p.id })}
+                            style={{ padding: 0, border: "none", background: "none", cursor: "pointer", color: "#357683", fontFamily: "inherit", fontSize: "inherit", textAlign: "left" }}
+                          >
+                            {p.imageUrl}
+                          </button>
+                        ) : hasOldBrokenUrl ? <span style={{ color: "#ef4444" }}>old link — re-upload needed</span> : <span style={{ color: "#cbd5e1" }}>no image</span>}
                       </td>
                       <td style={td}>
                         <div style={{ display: "flex", gap: 8 }}>
@@ -228,6 +242,25 @@ export default function AdminProductImages() {
           </div>
         )}
       </div>
+
+      {preview && (
+        <div
+          onClick={() => setPreview(null)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(15,23,42,0.75)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 1000, padding: 24, cursor: "zoom-out"
+          }}
+        >
+          <div style={{ maxWidth: "90vw", maxHeight: "90vh", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+            <img src={preview.url} alt={preview.name} style={{ maxWidth: "100%", maxHeight: "80vh", borderRadius: 8, boxShadow: "0 8px 30px rgba(0,0,0,0.4)" }} />
+            <div style={{ marginTop: 10, display: "flex", gap: 12, justifyContent: "center", alignItems: "center" }}>
+              <span style={{ color: "#fff", fontSize: 14, fontWeight: "bold" }}>{preview.name}</span>
+              <button onClick={() => setPreview(null)} style={{ ...btnUpload, background: "#fff" }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

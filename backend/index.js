@@ -37,7 +37,11 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Health check for Render
-app.get("/api/health", (req, res) => res.json({ status: "ok" }));
+app.get("/api/health", (req, res) => res.json({
+  status: "ok",
+  cloudinary: !!process.env.CLOUDINARY_CLOUD_NAME,
+  hasFirebase: !!serviceAccount,
+}));
 
 /* ──────────────────────────────────────────────
    CLOUDINARY UPLOAD HELPER

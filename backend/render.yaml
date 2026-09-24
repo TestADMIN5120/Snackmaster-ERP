@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: snackmaster-backend
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: NODE_ENV
+        value: production

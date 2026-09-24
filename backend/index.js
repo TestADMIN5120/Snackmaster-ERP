@@ -19,7 +19,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   }
 }
 
-const STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET || "snackmaster-refill-134fa.firebasestorage.app";
+const STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET || "snackmaster-refill-a950e.firebasestorage.app";
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -32,6 +32,9 @@ const app = express();
 
 app.use(cors());
 app.use(bodyParser.json());
+
+// Health check for Render
+app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
 /* ──────────────────────────────────────────────
    🖼️ PRODUCT IMAGES — stored in Firebase Storage

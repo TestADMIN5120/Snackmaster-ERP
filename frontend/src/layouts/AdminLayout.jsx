@@ -12,7 +12,6 @@ export default function AdminLayout() {
   const [orgStatus, setOrgStatus] = useState({ suspended: false, deleted: false });
   const [collapsed, setCollapsed] = useState(false);
   const [openSections, setOpenSections] = useState({
-    inventory: true,
     warehouse: true,
     tracking: true,
     sales: true,
@@ -311,21 +310,14 @@ export default function AdminLayout() {
           }}>
             <NavLink to="/admin" label="Dashboard" icon="📊" />
 
-            {/* ZONE 1: INVENTORY & ROUTE */}
-            <SectionToggle label="Inventory & Route" sectionKey="inventory" />
-            {(collapsed || openSections.inventory) && (
+            {/* ZONE 1: WAREHOUSE OPS (incl. inventory & route management) */}
+            <SectionToggle label="Warehouse Ops" sectionKey="warehouse" />
+            {(collapsed || openSections.warehouse) && (
               <div>
                 <NavLink to="/admin/machines" label="All Machines" icon="🤖" />
                 <NavLink to="/admin/machines/assign" label="Assign Route" icon="📍" />
                 <NavLink to="/admin/products" label="Active Products" icon="🍫" />
                 <NavLink to="/admin/product-images" label="Product Images" icon="🖼️" />
-              </div>
-            )}
-
-            {/* ZONE 2: WAREHOUSE OPS */}
-            <SectionToggle label="Warehouse Ops" sectionKey="warehouse" />
-            {(collapsed || openSections.warehouse) && (
-              <div>
                 <NavLink to="/admin/warehouse/dashboard" label="Dashboard" icon="📈" />
                 <NavLink to="/admin/warehouse/master-products" label="Master Catalog" icon="📖" />
                 <NavLink to="/admin/warehouse/inward" label="Inward Stock" icon="📥" />
@@ -337,7 +329,7 @@ export default function AdminLayout() {
               </div>
             )}
 
-            {/* ZONE 3: TRACKING & AUDITS */}
+            {/* ZONE 2: TRACKING & AUDITS */}
             <SectionToggle label="Tracking & Audits" sectionKey="tracking" />
             {(collapsed || openSections.tracking) && (
               <div>
@@ -347,7 +339,7 @@ export default function AdminLayout() {
               </div>
             )}
 
-            {/* ZONE 4: SALES & FINANCIALS */}
+            {/* ZONE 3: SALES & FINANCIALS */}
             <SectionToggle label="Sales & Financials" sectionKey="sales" />
             {(collapsed || openSections.sales) && (
               <div>
@@ -357,7 +349,7 @@ export default function AdminLayout() {
               </div>
             )}
 
-            {/* ZONE 5: TEAM & SECURITY */}
+            {/* ZONE 4: TEAM & SECURITY */}
             <SectionToggle label="Team & Security" sectionKey="team" />
             {(collapsed || openSections.team) && (
               <div>
